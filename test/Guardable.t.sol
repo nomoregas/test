@@ -108,9 +108,6 @@ contract GuardableTest is Test {
         vault.withdraw(1 ether);
     }
 
-    /// @notice The exposure window is the current budget, and that is the honest bound on the design.
-    /// @dev A smaller budget or shorter expiry buys tighter containment at the cost of more frequent
-    ///      attestation. That dial is the whole risk decision an integrator makes.
     /// @notice The phantom-holder hole is worse here than in the async model, and unclosable.
     /// @dev In the async model `SlotDomain` refuses a diff that writes value to an unenumerated
     ///      address, which shuts this class structurally. There is no diff here — operators read the
@@ -136,6 +133,9 @@ contract GuardableTest is Test {
         assertEq(vault.totalAssets(), 0, "alice's deposit is gone and the guard never objected");
     }
 
+    /// @notice The exposure window is the current budget, and that is the honest bound on the design.
+    /// @dev A smaller budget or shorter expiry buys tighter containment at the cost of more frequent
+    ///      attestation. That dial is the whole risk decision an integrator makes.
     function test_exposureIsBoundedByTheLiveBudget() public {
         _refresh(2, 10 ether, 3_000);
         vault.buggyMint(attacker, 1_000 ether);
