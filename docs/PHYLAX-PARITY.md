@@ -163,7 +163,7 @@ Everything around the assertion library. We have essentially none of it, which i
 | Bonding and slashing of enforcers | — | **Open** at the AVS layer | Gas Killer has no slashing either (its own `SECURITY.md` says so). This is where their guarantee is objectively stronger |
 | `assertion-executor` | Operator node (`gas-killer/service`) | **Open** | Property evaluation is not wired into the real node at all |
 | `assertion-da` (assertion data availability) | — | **Open** | Property code must be published and pinned somewhere verifiable |
-| `credible-layer-contracts` (StateOracle, Batch, admin/DA verifier registries) | `PropertyRegistry` | **Weakened** | Ours has one owner and no verifier abstraction; theirs has pluggable admin verifiers (owner/whitelist/super-admin) and DA verifiers |
+| `credible-layer-contracts` (StateOracle, Batch, admin/DA verifier registries) | `PropertyCatalogue` + `SubscriptionRegistry` + `IAdopterAdmin` | **Adapted** | Admin verifiers ported (self/ownable/allowlist), listings versioned. DA verifiers still absent — property code has nowhere verifiable to live |
 | `pcl` CLI (`pcl test`, `pcl apply`) | `forge test` | **Open** | No deploy/apply workflow, no config format |
 | `phoundry` (patched Foundry) | stock Foundry | **Adapted** | We need no fork, because properties are ordinary Solidity with no custom precompiles |
 | `CredibleTestWithBacktesting` — replay historical transactions | — | **Open** | High value: lets you measure a property's false-block rate before shipping it |
@@ -203,12 +203,14 @@ guard rather than something the guard catches.
 2. **Rolling-window circuit breaker.** Keep the window in guarded state, updated by the same attested
    diff. Turns four Weakened rows into Ported ones. The property stops being stateless, which is the
    design decision to make deliberately.
-3. **Slot-scoped triggers.** Skip a property when the diff touches none of its slots. Cheap, and
+3. **DA for property code.** A subscriber trusts a listing's address; nothing publishes or pins the
+   source behind it. Their `assertion-da` exists for exactly this.
+4. **Slot-scoped triggers.** Skip a property when the diff touches none of its slots. Cheap, and
    required before a registry gets large.
-4. **An ERC-4626 adapter.** Lets any standard vault be guarded without hand-written view functions —
+5. **An ERC-4626 adapter.** Lets any standard vault be guarded without hand-written view functions —
    the difference between a library and a demo.
-5. **Backtesting against historical transactions.** Their `CredibleTestWithBacktesting` measures a
+6. **Backtesting against historical transactions.** Their `CredibleTestWithBacktesting` measures a
    property's false-block rate before it ships. Without this, `ConcentrationCap`-style deadlocks (see
    the README) are found in production rather than in review.
-6. **Wire property evaluation into the real operator node.** Until `gas-killer/service` evaluates
+7. **Wire property evaluation into the real operator node.** Until `gas-killer/service` evaluates
    properties and vetoes on violation, none of this is enforced anywhere.

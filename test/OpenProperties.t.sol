@@ -10,19 +10,27 @@ import {PanicState} from "../src/properties/PanicState.sol";
 import {OracleLiveness} from "../src/properties/OracleLiveness.sol";
 import {OracleDeviation} from "../src/properties/OracleDeviation.sol";
 import {FeeConsistency} from "../src/properties/FeeConsistency.sol";
-import {ValueRangeGuard} from "../src/properties/ValueRangeGuard.sol";
+import {ValueRangeGuard, Range} from "../src/properties/ValueRangeGuard.sol";
+import {CatalogueFixture} from "./helpers/CatalogueFixture.sol";
 import {SpecConformance} from "../src/properties/SpecConformance.sol";
 import {MockAdopter} from "./mocks/MockAdopter.sol";
 
 /// @notice Tests for the properties that were reachable in the parity audit but unbuilt.
-contract OpenPropertiesTest is Test {
+contract OpenPropertiesTest is Test, CatalogueFixture {
     MockAdopter adopter;
 
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
 
     function setUp() public {
+        _deployCatalogue();
         adopter = new MockAdopter();
+    }
+
+    /// @dev Deploy the shared property, list it, and subscribe this adopter with `config`.
+    function _valueRangeGuard(Range[] memory ranges) internal returns (ValueRangeGuard p) {
+        p = new ValueRangeGuard(subs);
+        _listAndSubscribe(p, "ValueRangeGuard", address(adopter), abi.encode(ranges));
     }
 
     function _ctx(SlotWrite[] memory writes) internal view returns (TransitionContext memory) {
@@ -251,17 +259,17 @@ contract OpenPropertiesTest is Test {
     // ---------------------------------------------------------- ValueRangeGuard
 
     function test_valueRange_allowsInRangeChange() public {
-        ValueRangeGuard.Range[] memory r = new ValueRangeGuard.Range[](1);
-        r[0] = ValueRangeGuard.Range(adopter.FEE_BASE(), 1, 1000);
-        ValueRangeGuard p = new ValueRangeGuard(r);
+        Range[] memory r = new Range[](1);
+        r[0] = Range(adopter.FEE_BASE(), 1, 1000);
+        ValueRangeGuard p = _valueRangeGuard(r);
         (bool ok,) = _check(p, _one(adopter.FEE_BASE(), 10, 500));
         assertTrue(ok);
     }
 
     function test_valueRange_blocksOutOfRangeChange() public {
-        ValueRangeGuard.Range[] memory r = new ValueRangeGuard.Range[](1);
-        r[0] = ValueRangeGuard.Range(adopter.FEE_BASE(), 1, 1000);
-        ValueRangeGuard p = new ValueRangeGuard(r);
+        Range[] memory r = new Range[](1);
+        r[0] = Range(adopter.FEE_BASE(), 1, 1000);
+        ValueRangeGuard p = _valueRangeGuard(r);
         (bool ok, string memory reason) = _check(p, _one(adopter.FEE_BASE(), 10, 5000));
         assertFalse(ok);
         assertEq(reason, "a configuration slot left its permitted range");
@@ -269,9 +277,9 @@ contract OpenPropertiesTest is Test {
 
     /// @notice Zeroing a timelock delay is the canonical compromised-governance move.
     function test_valueRange_blocksZeroedDelay() public {
-        ValueRangeGuard.Range[] memory r = new ValueRangeGuard.Range[](1);
-        r[0] = ValueRangeGuard.Range(adopter.FEE_BASE(), 86_400, 604_800);
-        ValueRangeGuard p = new ValueRangeGuard(r);
+        Range[] memory r = new Range[](1);
+        r[0] = Range(adopter.FEE_BASE(), 86_400, 604_800);
+        ValueRangeGuard p = _valueRangeGuard(r);
         (bool ok,) = _check(p, _one(adopter.FEE_BASE(), 172_800, 0));
         assertFalse(ok);
     }

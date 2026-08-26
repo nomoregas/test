@@ -9,7 +9,8 @@ import {PreState} from "../src/PreState.sol";
 import {SlotProtection} from "../src/properties/SlotProtection.sol";
 import {ValueConservation} from "../src/properties/ValueConservation.sol";
 import {Monotonic} from "../src/properties/Monotonic.sol";
-import {DeltaBound} from "../src/properties/DeltaBound.sol";
+import {DeltaBound, Bound} from "../src/properties/DeltaBound.sol";
+import {CatalogueFixture} from "./helpers/CatalogueFixture.sol";
 import {SharePriceFloor} from "../src/properties/SharePriceFloor.sol";
 import {AssetFlowConsistency} from "../src/properties/AssetFlowConsistency.sol";
 import {ImplementationLock} from "../src/properties/ImplementationLock.sol";
@@ -21,7 +22,7 @@ import {MockAttestor} from "./mocks/MockAttestor.sol";
 /// @notice Tests for the properties ported from Phylax's assertion library.
 /// @dev Each property gets a holds-case and a violates-case, evaluated the way an operator would:
 ///      against the post-state and the proposed diff together.
-contract PortedPropertiesTest is Test {
+contract PortedPropertiesTest is Test, CatalogueFixture {
     PropertyRegistry registry;
     MockAttestor attestor;
     GuardedVault vault;
@@ -33,6 +34,7 @@ contract PortedPropertiesTest is Test {
     bytes32 constant SLOT_B = bytes32(uint256(0xBB));
 
     function setUp() public {
+        _deployCatalogue();
         registry = new PropertyRegistry(address(this));
         attestor = new MockAttestor();
         vault = new GuardedVault(registry, attestor, GuardedState.Mode.OffchainVeto, 10_000);
@@ -63,16 +65,39 @@ contract PortedPropertiesTest is Test {
         return p.check(_ctx(writes));
     }
 
+    /// @dev The shared-catalogue pattern: one deployment, per-adopter config. Each helper lists the
+    ///      property and subscribes the vault, which is what an integrator does once via
+    ///      `SubscriptionRegistry.subscribe`.
+    function _slotProtection(bytes32[] memory frozen) internal returns (SlotProtection p) {
+        p = new SlotProtection(subs);
+        _listAndSubscribe(p, "SlotProtection", address(vault), abi.encode(frozen));
+    }
+
+    function _monotonic(bytes32[] memory slots) internal returns (Monotonic p) {
+        p = new Monotonic(subs);
+        _listAndSubscribe(p, "Monotonic", address(vault), abi.encode(slots));
+    }
+
+    function _valueConservation(bytes32[] memory slots) internal returns (ValueConservation p) {
+        p = new ValueConservation(subs);
+        _listAndSubscribe(p, "ValueConservation", address(vault), abi.encode(slots));
+    }
+
+    function _deltaBound(Bound[] memory bounds) internal returns (DeltaBound p) {
+        p = new DeltaBound(subs);
+        _listAndSubscribe(p, "DeltaBound", address(vault), abi.encode(bounds));
+    }
+
     // ------------------------------------------------------- SlotProtection
 
     function test_slotProtection_allowsUntouchedSlots() public {
-        SlotProtection p = new SlotProtection(_slots(SLOT_A));
+        SlotProtection p = _slotProtection(_slots(SLOT_A));
         (bool ok,) = _check(p, _one(SLOT_B, 1, 2));
         assertTrue(ok);
     }
 
     function test_slotProtection_blocksAnyWrite() public {
-        SlotProtection p = new SlotProtection(_slots(SLOT_A));
+        SlotProtection p = _slotProtection(_slots(SLOT_A));
         (bool ok, string memory reason) = _check(p, _one(SLOT_A, 1, 2));
         assertFalse(ok);
         assertEq(reason, "transition writes a frozen slot");
@@ -82,7 +107,7 @@ contract PortedPropertiesTest is Test {
     /// @dev Matches Phylax's conservative reading of `forbidChangeForSlots`: for a slot that is
     ///      supposed to be frozen, something reaching for it is the signal, not the delta.
     function test_slotProtection_blocksNoOpWrite() public {
-        SlotProtection p = new SlotProtection(_slots(SLOT_A));
+        SlotProtection p = _slotProtection(_slots(SLOT_A));
         (bool ok,) = _check(p, _one(SLOT_A, 7, 7));
         assertFalse(ok, "a no-op write to a frozen slot must still be flagged");
     }
@@ -93,7 +118,7 @@ contract PortedPropertiesTest is Test {
         bytes32[] memory s = new bytes32[](2);
         s[0] = SLOT_A;
         s[1] = SLOT_B;
-        ValueConservation p = new ValueConservation(s);
+        ValueConservation p = _valueConservation(s);
 
         SlotWrite[] memory w = new SlotWrite[](2);
         w[0] = SlotWrite(SLOT_A, bytes32(uint256(100)), bytes32(uint256(40)));
@@ -107,7 +132,7 @@ contract PortedPropertiesTest is Test {
         bytes32[] memory s = new bytes32[](2);
         s[0] = SLOT_A;
         s[1] = SLOT_B;
-        ValueConservation p = new ValueConservation(s);
+        ValueConservation p = _valueConservation(s);
 
         SlotWrite[] memory w = new SlotWrite[](2);
         w[0] = SlotWrite(SLOT_A, bytes32(uint256(100)), bytes32(uint256(40)));
@@ -121,13 +146,13 @@ contract PortedPropertiesTest is Test {
     // ------------------------------------------------------------- Monotonic
 
     function test_monotonic_allowsIncrease() public {
-        Monotonic p = new Monotonic(_slots(SLOT_A));
+        Monotonic p = _monotonic(_slots(SLOT_A));
         (bool ok,) = _check(p, _one(SLOT_A, 5, 9));
         assertTrue(ok);
     }
 
     function test_monotonic_blocksDecrease() public {
-        Monotonic p = new Monotonic(_slots(SLOT_A));
+        Monotonic p = _monotonic(_slots(SLOT_A));
         (bool ok, string memory reason) = _check(p, _one(SLOT_A, 9, 5));
         assertFalse(ok);
         assertEq(reason, "a monotonic slot decreased");
@@ -137,7 +162,7 @@ contract PortedPropertiesTest is Test {
     /// @dev Phylax makes the same choice: intermediate snapshots describe states that never
     ///      existed at a transition boundary.
     function test_monotonic_ignoresIntermediateDip() public {
-        Monotonic p = new Monotonic(_slots(SLOT_A));
+        Monotonic p = _monotonic(_slots(SLOT_A));
         SlotWrite[] memory w = new SlotWrite[](2);
         w[0] = SlotWrite(SLOT_A, bytes32(uint256(5)), bytes32(uint256(1)));
         w[1] = SlotWrite(SLOT_A, bytes32(uint256(1)), bytes32(uint256(7)));
@@ -148,26 +173,26 @@ contract PortedPropertiesTest is Test {
     // ------------------------------------------------------------ DeltaBound
 
     function test_deltaBound_allowsWithinBound() public {
-        DeltaBound.Bound[] memory b = new DeltaBound.Bound[](1);
-        b[0] = DeltaBound.Bound(SLOT_A, 100);
-        DeltaBound p = new DeltaBound(b);
+        Bound[] memory b = new Bound[](1);
+        b[0] = Bound(SLOT_A, 100);
+        DeltaBound p = _deltaBound(b);
         (bool ok,) = _check(p, _one(SLOT_A, 0, 100));
         assertTrue(ok);
     }
 
     function test_deltaBound_blocksBeyondBound() public {
-        DeltaBound.Bound[] memory b = new DeltaBound.Bound[](1);
-        b[0] = DeltaBound.Bound(SLOT_A, 100);
-        DeltaBound p = new DeltaBound(b);
+        Bound[] memory b = new Bound[](1);
+        b[0] = Bound(SLOT_A, 100);
+        DeltaBound p = _deltaBound(b);
         (bool ok, string memory reason) = _check(p, _one(SLOT_A, 0, 101));
         assertFalse(ok);
         assertEq(reason, "a slot moved more than its per-transition bound");
     }
 
     function test_deltaBound_boundsDecreasesToo() public {
-        DeltaBound.Bound[] memory b = new DeltaBound.Bound[](1);
-        b[0] = DeltaBound.Bound(SLOT_A, 10);
-        DeltaBound p = new DeltaBound(b);
+        Bound[] memory b = new Bound[](1);
+        b[0] = Bound(SLOT_A, 10);
+        DeltaBound p = _deltaBound(b);
         (bool ok,) = _check(p, _one(SLOT_A, 100, 50));
         assertFalse(ok, "a large withdrawal is as bounded as a large mint");
     }
@@ -292,8 +317,8 @@ contract PortedPropertiesTest is Test {
     ///      the registry blocks on the first violation, so separate entries can only ever OR.
     function test_composite_andRequiresEveryMemberViolated() public {
         IProperty[] memory members = new IProperty[](2);
-        members[0] = new Monotonic(_slots(SLOT_A)); // violated by a decrease
-        members[1] = new SlotProtection(_slots(SLOT_B)); // untouched, so it holds
+        members[0] = _monotonic(_slots(SLOT_A)); // violated by a decrease
+        members[1] = _slotProtection(_slots(SLOT_B)); // untouched, so it holds
 
         Composite p = new Composite("GatedDrain", Composite.Operator.And, members);
         (bool ok,) = _check(p, _one(SLOT_A, 9, 5));
@@ -302,8 +327,8 @@ contract PortedPropertiesTest is Test {
 
     function test_composite_andBlocksWhenAllMembersViolated() public {
         IProperty[] memory members = new IProperty[](2);
-        members[0] = new Monotonic(_slots(SLOT_A));
-        members[1] = new SlotProtection(_slots(SLOT_A));
+        members[0] = _monotonic(_slots(SLOT_A));
+        members[1] = _slotProtection(_slots(SLOT_A));
 
         Composite p = new Composite("GatedDrain", Composite.Operator.And, members);
         (bool ok,) = _check(p, _one(SLOT_A, 9, 5));
@@ -312,8 +337,8 @@ contract PortedPropertiesTest is Test {
 
     function test_composite_orBlocksOnAnyMember() public {
         IProperty[] memory members = new IProperty[](2);
-        members[0] = new Monotonic(_slots(SLOT_A));
-        members[1] = new SlotProtection(_slots(SLOT_B));
+        members[0] = _monotonic(_slots(SLOT_A));
+        members[1] = _slotProtection(_slots(SLOT_B));
 
         Composite p = new Composite("AnyDamage", Composite.Operator.Or, members);
         (bool ok,) = _check(p, _one(SLOT_A, 9, 5));

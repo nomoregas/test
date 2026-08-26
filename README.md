@@ -80,6 +80,45 @@ keep that honest.
 you pay for the check you were trying to avoid. Reasonable for cheap property sets, for a rollout
 period, and for proving in tests that the guard is load-bearing rather than decorative.
 
+## Subscribing
+
+Properties are published in a `PropertyCatalogue` and adopters subscribe through a
+`SubscriptionRegistry`. Configuration is stored per (adopter, property) and read at check time, so
+**one property deployment serves every adopter** — a `Monotonic` on a chain protects everyone who asks
+it to, each with their own slot set. Subscribing is a config write, not a deploy.
+
+```solidity
+subs.subscribe(adopter, monotonic, abi.encode(watchedSlots));   // once
+subs.updateConfig(adopter, monotonic, abi.encode(newSlots));    // whenever
+(bool ok, string memory which,) = subs.checkAll(adopter, ctx);  // operators, monitors, settle
+```
+
+Authorisation goes through a pluggable `IAdopterAdmin`, not `msg.sender == adopter`, because a
+contract already deployed cannot call `subscribe` and never will:
+
+| Verifier | Who may configure | For |
+|---|---|---|
+| `AdminVerifierSelf` | the adopter itself | contracts written against this system |
+| `AdminVerifierOwnable` | whatever `owner()` returns | the large population of deployed Ownable contracts, untouched |
+| `AdminVerifierAllowlist` | a curated binding | adopters whose admin cannot be read on-chain (multisig governance, external proxy admin) |
+
+This mirrors Phylax's pluggable admin verifiers on their `StateOracle`; the parity audit listed its
+absence as a gap on our side.
+
+Two deliberate fail-closed choices. An unconfigured self-contained property refuses every transition
+rather than passing them — a `SlotProtection` with no slots would otherwise read as protection while
+providing none, which is worse than no guard. And `subscribe` rejects an empty config for those
+properties, so the door has two locks.
+
+Listings are versioned and immutable: a property's behaviour is a security assumption, so repointing a
+listing at new code would repoint every subscriber's guarantees with it. A revision is a new listing.
+Deprecation marks a listing unrecommended without breaking anyone already on it.
+
+The five self-contained properties (`SlotProtection`, `Monotonic`, `DeltaBound`, `ValueConservation`,
+`ValueRangeGuard`) read only the diff, so they need nothing from the adopter and are genuinely
+drop-in. The rest read adopter view functions, which is the integration cost an ERC-4626-style adapter
+would remove.
+
 ## Why properties live in their own contracts
 
 Because evaluation is off-chain, composability is free. Properties are separate contracts in a
@@ -207,6 +246,7 @@ src/
 ├── interfaces/IProperty.sol   IProperty, IGuardedDomain, IAttestor, SlotWrite, TransitionContext
 ├── PropertyRegistry.sol       the enforced property set, add/remove at runtime
 ├── GuardedState.sol           intent queue + attested settlement + checkAll
+├── catalogue/                 PropertyCatalogue, SubscriptionRegistry, admin verifiers
 ├── subscribe/                 Guardable + LegacyVault: additive adoption for deployed contracts
 ├── properties/                21 property contracts, one per file
 └── examples/GuardedVault.sol  worked integration; previewDeposit/previewTransfer are the spec
@@ -226,7 +266,7 @@ value really accrues and that the attacks are really refused, so the invariants 
 
 ```bash
 forge build
-forge test           # 81 tests: 12 vault + 26 ported + 26 reachable + 12 additive-adoption + 4 invariants + 1 anti-vacuity
+forge test           # 97 tests: 12 vault + 26 ported + 26 reachable + 12 additive + 16 catalogue + 4 invariants + 1 anti-vacuity
 ```
 
 Invariants run 256 × 64 by default (`foundry.toml`).
