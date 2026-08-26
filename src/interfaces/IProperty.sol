@@ -2,16 +2,26 @@
 pragma solidity ^0.8.27;
 
 /// @notice One raw storage write inside an attested transition.
-/// @dev Mirrors how Gas Killer settlement actually mutates state: `sstore(slot, value)`.
+///
+/// @dev Carries `oldValue` as well as `newValue`, which is what makes pre/post reasoning possible
+///      at all. Phylax's assertions get pre-state from a second EVM fork (`ph.forkPreTx()`); a
+///      property here has no such luxury — by the time it runs on-chain the pre-state is gone. So
+///      the diff carries its own before-image, and `PreState` reconstructs the rest.
+///
+///      Settlement verifies `oldValue` against live storage before applying, so the diff is a
+///      compare-and-swap rather than a blind write. Without that check an operator could simply lie
+///      about the before-image and every pre/post property built on it would be fooled — and a
+///      stale diff assembled against an older state would apply silently.
 struct SlotWrite {
     bytes32 slot;
-    bytes32 value;
+    bytes32 oldValue;
+    bytes32 newValue;
 }
 
 /// @notice Everything a property needs in order to judge a proposed transition.
 /// @dev Properties come in two flavours and this struct serves both:
-///      - *state* properties ignore `writes` and read the target's storage directly;
-///      - *diff* properties ignore storage and inspect `writes` (see SlotDomain).
+///      - *state* properties read the target's storage through its own view functions;
+///      - *diff* properties inspect `writes`, and can recover pre-state via `PreState`.
 ///      The caller is responsible for evaluating a property against the **post-state**:
 ///      operators do it on their off-chain simulation, tests do it after applying.
 struct TransitionContext {

@@ -74,7 +74,7 @@ contract VaultHandler is Test {
         vm.prank(a);
         bytes32 id = vault.request(abi.encode("bad mint", amount));
         SlotWrite[] memory bad = new SlotWrite[](1);
-        bad[0] = SlotWrite(vault.sharesSlot(a), bytes32(vault.sharesOf(a) + amount));
+        bad[0] = SlotWrite(vault.sharesSlot(a), bytes32(vault.sharesOf(a)), bytes32(vault.sharesOf(a) + amount));
         _operatorSettle(id, bad);
     }
 
@@ -88,7 +88,7 @@ contract VaultHandler is Test {
         vm.prank(a);
         bytes32 id = vault.request(abi.encode("phantom", amount));
         SlotWrite[] memory bad = new SlotWrite[](1);
-        bad[0] = SlotWrite(vault.sharesSlot(phantom), bytes32(amount));
+        bad[0] = SlotWrite(vault.sharesSlot(phantom), bytes32(0), bytes32(amount));
         _operatorSettle(id, bad);
     }
 

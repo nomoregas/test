@@ -55,6 +55,7 @@ abstract contract GuardedState {
     error UnknownIntent(bytes32 id);
     error AlreadySettled(bytes32 id);
     error NothingToSettle();
+    error StaleWrite(bytes32 slot, bytes32 expected, bytes32 actual);
 
     event IntentRequested(bytes32 indexed id, address indexed requester, bytes action);
     event TransitionSettled(uint256 indexed transitionIndex, bytes32[] intentIds, uint256 writeCount);
@@ -165,13 +166,28 @@ abstract contract GuardedState {
 
     // ------------------------------------------------------------- internals
 
-    /// @dev Raw `sstore`, exactly as Gas Killer settlement applies a diff. This is why
-    ///      SlotDomain is not optional: the applier itself has no opinion about what a
-    ///      legitimate slot is, so something has to.
+    /// @dev Raw `sstore`, exactly as Gas Killer settlement applies a diff — but gated on the
+    ///      before-image matching live storage, making each write a compare-and-swap.
+    ///
+    ///      Two things depend on this. Every pre/post property reads `oldValue` as the truth about
+    ///      what the state used to be, so an unverified before-image would let an operator fabricate
+    ///      the history a property is judged against — monotonicity, delta caps and share-price
+    ///      floors would all be trivially satisfiable. And a diff assembled against an older state
+    ///      would otherwise apply silently on top of an unrelated one, which is the same staleness
+    ///      hazard `blockStaleMeasure` bounds on the quorum side.
+    ///
+    ///      This is also why SlotDomain is not optional: the applier has no opinion about *which*
+    ///      slots are legitimate, only that it was told the right prior contents.
     function _applyWrites(SlotWrite[] calldata writes) private {
         for (uint256 i; i < writes.length; ++i) {
             bytes32 slot = writes[i].slot;
-            bytes32 value = writes[i].value;
+            bytes32 expected = writes[i].oldValue;
+            bytes32 value = writes[i].newValue;
+            bytes32 actual;
+            assembly {
+                actual := sload(slot)
+            }
+            if (actual != expected) revert StaleWrite(slot, expected, actual);
             assembly {
                 sstore(slot, value)
             }

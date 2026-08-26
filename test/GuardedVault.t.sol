@@ -132,7 +132,7 @@ contract GuardedVaultTest is Test {
 
         // Credit alice without moving the total: conservation must catch it.
         SlotWrite[] memory bad = new SlotWrite[](1);
-        bad[0] = SlotWrite(vault.sharesSlot(alice), bytes32(uint256(500)));
+        bad[0] = SlotWrite(vault.sharesSlot(alice), bytes32(0), bytes32(uint256(500)));
         bytes memory att = _attest(ids, bad);
 
         vm.expectRevert(
@@ -149,8 +149,8 @@ contract GuardedVaultTest is Test {
 
         // Shares and total agree, but nothing backs them.
         SlotWrite[] memory bad = new SlotWrite[](2);
-        bad[0] = SlotWrite(vault.sharesSlot(alice), bytes32(uint256(100)));
-        bad[1] = SlotWrite(vault.totalSharesSlot(), bytes32(uint256(100)));
+        bad[0] = SlotWrite(vault.sharesSlot(alice), bytes32(0), bytes32(uint256(100)));
+        bad[1] = SlotWrite(vault.totalSharesSlot(), bytes32(0), bytes32(uint256(100)));
         bytes memory att = _attest(ids, bad);
 
         vm.expectRevert(
@@ -201,7 +201,7 @@ contract GuardedVaultTest is Test {
         bytes32[] memory ids = _request(alice, abi.encode("phantom", 1e18));
 
         SlotWrite[] memory bad = new SlotWrite[](1);
-        bad[0] = SlotWrite(vault.sharesSlot(phantom), bytes32(uint256(1e18)));
+        bad[0] = SlotWrite(vault.sharesSlot(phantom), bytes32(0), bytes32(uint256(1e18)));
         bytes memory att = _attest(ids, bad);
 
         // Conservation would have shrugged. SlotDomain does not.
@@ -224,7 +224,7 @@ contract GuardedVaultTest is Test {
 
         bytes32[] memory ids = _request(alice, abi.encode("phantom", 1e18));
         SlotWrite[] memory bad = new SlotWrite[](1);
-        bad[0] = SlotWrite(vault.sharesSlot(phantom), bytes32(uint256(1e18)));
+        bad[0] = SlotWrite(vault.sharesSlot(phantom), bytes32(0), bytes32(uint256(1e18)));
         _settle(ids, bad);
 
         // The books "balance" while 1e18 shares exist off the register.
@@ -245,7 +245,7 @@ contract GuardedVaultTest is Test {
         bytes32[] memory ids = _request(alice, abi.encode("mint out of thin air", 500));
 
         SlotWrite[] memory bad = new SlotWrite[](1);
-        bad[0] = SlotWrite(vault.sharesSlot(alice), bytes32(uint256(500)));
+        bad[0] = SlotWrite(vault.sharesSlot(alice), bytes32(0), bytes32(uint256(500)));
         _settle(ids, bad); // no revert: nothing on-chain re-checks
 
         assertEq(vault.shares(alice), 500);
