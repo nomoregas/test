@@ -59,7 +59,7 @@ The root-cause table: what a property here can and cannot observe, versus their 
 | `getErc20Transfers`, `getErc20TransfersForTokens`, `changedErc20BalanceDeltas`, `reduceErc20BalanceDeltas`, `conserveBalance` | — | **Blocked** | Foreign token ledgers. The operator would have to attest to foreign state, which the diff cannot express |
 | `anomalyContext`, `Sensitivity` levels | — | **Blocked** | Needs executor-side transaction scoring; no equivalent signal |
 | `inflowRate`, `outflowRate`, `inflowContext`, `outflowContext` | — | **Blocked** | Needs executor-held rolling state. Tractable via guarded state — see §F |
-| `oracleSanity`, `oracleSanityAt` | — | **Open** | Needs an oracle endpoint the adopter exposes |
+| `oracleSanity`, `oracleSanityAt` | `OracleLiveness`, `OracleDeviation` | **Weakened** | Via mirrored adopter state; cannot read the feed itself |
 | `assetsMatchSharePrice`, `ratioGe`, `mulDivUp/Down`, `normalizeDecimals` | inline in `SharePriceFloor` | **Open** | Pure math. Worth extracting into a shared library |
 
 ## B. Trigger model
@@ -93,20 +93,20 @@ Their curated library, `src/protection/`. 26 assertion contracts across 7 famili
 | `ERC4626SharePriceAssertion` | `SharePriceFloor` | **Ported** | None — endpoint comparison, bps tolerance, empty-supply skip |
 | `ERC4626AssetFlowAssertion` | `AssetFlowConsistency` | **Weakened** | Ours checks the diff against the adopter's *declared* flow; theirs against *observed* ERC-20 movement, catching fee-on-transfer and rebasing tokens. Not closable without foreign state |
 | `ERC4626CumulativeOutflowAssertion` | `DeltaBound` | **Weakened** | Per-transition cap only. Rolling window — see §F |
-| `ERC4626PreviewAssertion` | — | **Open** | Preview functions must agree with realised results. Expressible: compare `previewX()` against the diff's actual effect |
+| `ERC4626PreviewAssertion` | `SpecConformance` | **Ported** | Generalised: the diff must equal the adopter's own preview. Only usable where the spec is cheap to evaluate |
 | `ERC4626BaseAssertion`, `IERC4626` | — | **Open** | An ERC-4626 adapter so any standard vault can be guarded without bespoke view functions. High practical value |
 | `MetaMorphoVaultAssertion` | — | **Open** | Protocol-specific example |
 | `AnomalyCompositeAssertion` | `Composite` | **Adapted** | The structural part (AND/OR in one evaluation) ports exactly, including the reason: blocking is disjunctive across registrations, so a conjunction must live in one `check`. The anomaly gate does not port |
 | `AnomalyGatedUpgradeAssertion` | `ImplementationLock` | **Weakened** | Same EIP-1967 slots; ungated. An allowlist replaces the anomaly score, which is a different and blunter policy |
 | `AnomalyGatedAccountingAssertion` | partially `SharePriceFloor` | **Weakened** | Share-price move without the anomaly gate |
 | `AnomalyGatedOutflowAssertion` | partially `DeltaBound` | **Weakened** | Outflow without the gate or the window |
-| `AnomalyGatedOracleAssertion` | — | **Blocked** | Needs oracle observation plus the gate |
+| `AnomalyGatedOracleAssertion` | `OracleDeviation`, `OracleLiveness` | **Weakened** | Oracle observation now exists via mirrored adopter state; the anomaly gate still does not port |
 | `AnomalyUngatedAssertion`, `AnomalyGatedBaseAssertion` | — | **Blocked** | Base classes for the gating mechanism itself |
-| `SafeConfigLockAssertion` | — | **Open** | Threshold/owner-set/module-set hashes are all adopter storage, so this is expressible. Needs set-hash helpers |
+| `SafeConfigLockAssertion` | `ValueRangeGuard` + `SlotProtection` | **Weakened** | Threshold minimums and frozen guard/handler slots are covered; owner/module *set-hash* matching still needs a helper |
 | `SafeTxShapeAssertion` | — | **Blocked** | Inspects transaction shape; no call trace |
 | `CowSettlementAssertion` | — | **Blocked** | Settlement call structure |
 | `UniswapV4PoolManagerAssertion` | — | **Blocked** | Pool-manager call sequences |
-| `LendingBaseAssertion`, `AaveV3LikeOperationSafety`, `AaveV3PostOperationSolvency`, `SparkLendV1OperationSafety` | `Solvency` (generic only) | **Weakened** | Post-operation solvency *per touched account* is the valuable part and is Open. Health-factor logic needs oracle prices |
+| `LendingBaseAssertion`, `AaveV3LikeOperationSafety`, `AaveV3PostOperationSolvency`, `SparkLendV1OperationSafety` | `PostOperationSolvency` | **Ported** | Per-account, with the liquidation-improves branch. Protocol-specific health-factor maths still needs oracle prices |
 | `PerpetualBaseAssertion` | — | **Open** | Family scaffold, no concrete checks |
 
 ## D. Assertions Book
@@ -117,20 +117,20 @@ Their teaching catalogue, `examples/assertions-book` — 22 entries, numbered wi
 |---|---|---|---|
 | 1 | Implementation change | `ImplementationLock` | **Ported** |
 | 2 | ERC-4626 operations | `SharePriceFloor` + `AssetFlowConsistency` | **Weakened** |
-| 4 | KYC / whitelist | — | **Open** — participant sets are adopter storage |
+| 4 | KYC / whitelist | `ParticipantAllowlist` | **Adapted** — adopter names its own participants |
 | 5 | Owner change | `ImplementationLock` (owner slot) | **Ported** |
-| 6 | Constant product (AMM `k`) | — | **Open** — reserves are adopter storage; good next property |
-| 7 | Lending health factor | — | **Blocked** — needs oracle prices |
+| 6 | Constant product (AMM `k`) | `ConstantProduct` | **Ported** |
+| 7 | Lending health factor | `PostOperationSolvency` | **Weakened** — health from mirrored state, not live prices |
 | 8 | Positions sum | `Conservation` | **Ported** |
 | 9 | Timelock verification | `SlotProtection` (delay slots) | **Adapted** |
-| 10 | Oracle liveness | — | **Open** — needs an oracle timestamp endpoint |
-| 11 | TWAP deviation | — | **Open** — same |
+| 10 | Oracle liveness | `OracleLiveness` | **Weakened** — reads a mirrored timestamp, not the feed |
+| 11 | TWAP deviation | `OracleDeviation` | **Weakened** — mirrored prices |
 | 12 | ERC-4626 assets/shares | `SharePriceFloor` | **Ported** |
 | 13 | ERC-4626 deposit/withdraw | `AssetFlowConsistency` | **Weakened** |
-| 14 | Fee verification | — | **Open** |
-| 15 | Price within ticks | — | **Open** — tick state is adopter storage |
-| 16 | Liquidation health factor | — | **Blocked** — oracle prices |
-| 17 | Panic-state verification | — | **Open** — a paused/panic flag is a slot |
+| 14 | Fee verification | `FeeConsistency` | **Ported** |
+| 15 | Price within ticks | `ValueRangeGuard` | **Adapted** |
+| 16 | Liquidation health factor | `PostOperationSolvency` | **Weakened** — liquidation branch works; prices mirrored |
+| 17 | Panic-state verification | `PanicState` | **Ported** — checks both endpoints |
 | 18 | Harvest increases balance | `Monotonic` | **Adapted** |
 | 19 | Tokens-borrowed invariant | `Conservation` | **Adapted** |
 | 20 | ERC-20 drain | `DeltaBound` | **Weakened** — no foreign ledger, no window |
@@ -145,10 +145,10 @@ Their reusable building blocks, `examples/micro-patterns` — the most directly 
 | Phylax micro-pattern | Here | Status | Work needed |
 |---|---|---|---|
 | `AccountingConservation` — aggregate identities hold after any tx | `Conservation`, `ValueConservation` | **Ported** | None |
-| `ConfigurationGuard` — init/wiring/timing sanity | `SlotProtection` | **Adapted** | Ours freezes slots; theirs validates values. Value-range checks are Open |
-| `PostOperationSolvency` — risk-increasing ops leave the account solvent; liquidations improve it | `Solvency` (global only) | **Weakened** | **Per-account** solvency is the valuable version and is Open. Highest-value gap in this table |
+| `ConfigurationGuard` — init/wiring/timing sanity | `SlotProtection` + `ValueRangeGuard` | **Ported** | Freeze *and* validate-within-range are both covered |
+| `PostOperationSolvency` — risk-increasing ops leave the account solvent; liquidations improve it | `PostOperationSolvency` | **Ported** | Both branches, per touched account |
 | `TieredCircuitBreaker` — soft breach → liquidation-only, hard breach → stop | `DeltaBound` (single tier) | **Weakened** | Tiers plus a rolling window — see §F |
-| `ParticipantGate` — extract participants from calls, block listed accounts | — | **Blocked** | Participant extraction needs the call trace. A slot-based blocklist is Open |
+| `ParticipantGate` — extract participants from calls, block listed accounts | `ParticipantAllowlist` | **Weakened** | Adopter names its participants; extraction from a trace is still Blocked, so a bug in `participantsOf` is a hole rather than a catch |
 | `OracleReduceOnlyGate` — on oracle drift, block risk-increasing calls, leave repay open | — | **Blocked** | Needs oracle observation and call classification |
 | `CallSandwichHonesty` — compare calldata, pre-call preview, return value, emitted event | — | **Blocked** | Needs calls, returns and logs together. Partially unblocked by carrying diff logs |
 
@@ -178,33 +178,37 @@ Everything around the assertion library. We have essentially none of it, which i
 
 | Category | Ported / Adapted | Weakened | Blocked | Open |
 |---|---|---|---|---|
-| PhEvm capabilities (15 groups) | 3 | 0 | 8 | 4 |
+| PhEvm capabilities (15 groups) | 3 | 1 | 8 | 3 |
 | Triggers (9) | 1 | 1 | 5 | 2 |
-| Protection assertions (26) | 4 | 7 | 6 | 9 |
-| Assertions Book (22) | 8 | 4 | 6 | 8 |
-| Micro-patterns (7) | 2 | 2 | 3 | 0 |
+| Protection assertions (26) | 6 | 9 | 5 | 6 |
+| Assertions Book (22) | 13 | 6 | 3 | 0 |
+| Micro-patterns (7) | 4 | 2 | 1 | 0 |
 | Platform (16) | 2 | 1 | 2 | 11 |
 
-Read the Blocked column as the model's boundary and the Open column as the backlog. Roughly a third
-of their assertion surface is reachable, a third needs core work, and a third is out of reach
-without a call trace or foreign-state access.
+Read the Blocked column as the model's boundary and the Open column as the backlog. Every
+Assertions Book entry and every micro-pattern that is reachable at all is now built; the remaining
+Open rows are platform work and two convenience items, not properties.
+
+The Weakened column grew as the Open column shrank, and that is the honest result: several patterns
+are now *expressible* but only against state the adopter mirrors into its own storage. An oracle
+property reading a mirrored timestamp protects you only if the mirror is maintained. Pair those with
+a `Monotonic` on the same slot, and treat a bug in the adopter's own reporting view as a hole in the
+guard rather than something the guard catches.
 
 ## Prioritised work list
 
 1. **Carry the diff's `call` and `log` entries in `TransitionContext`.** Gas Killer already applies
    all three update types; only our prototype is `sstore`-only. Unblocks every log-based property and
    part of `CallSandwichHonesty`.
-2. **Per-account post-operation solvency.** The most valuable single property we lack, and fully
-   expressible today — it is the one that stops a lending protocol leaving a position underwater.
-3. **Rolling-window circuit breaker.** Keep the window in guarded state, updated by the same attested
+2. **Rolling-window circuit breaker.** Keep the window in guarded state, updated by the same attested
    diff. Turns four Weakened rows into Ported ones. The property stops being stateless, which is the
    design decision to make deliberately.
-4. **Slot-scoped triggers.** Skip a property when the diff touches none of its slots. Cheap, and
+3. **Slot-scoped triggers.** Skip a property when the diff touches none of its slots. Cheap, and
    required before a registry gets large.
-5. **An ERC-4626 adapter.** Lets any standard vault be guarded without hand-written view functions —
+4. **An ERC-4626 adapter.** Lets any standard vault be guarded without hand-written view functions —
    the difference between a library and a demo.
-6. **Backtesting against historical transactions.** Their `CredibleTestWithBacktesting` measures a
+5. **Backtesting against historical transactions.** Their `CredibleTestWithBacktesting` measures a
    property's false-block rate before it ships. Without this, `ConcentrationCap`-style deadlocks (see
    the README) are found in production rather than in review.
-7. **Wire property evaluation into the real operator node.** Until `gas-killer/service` evaluates
+6. **Wire property evaluation into the real operator node.** Until `gas-killer/service` evaluates
    properties and vetoes on violation, none of this is enforced anywhere.

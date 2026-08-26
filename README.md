@@ -73,6 +73,15 @@ when nobody is paying gas for it.
 | `AssetFlowConsistency` | the asset delta matches the declared flow; zero address holds nothing |
 | `ImplementationLock` | EIP-1967 implementation/admin/owner change only to an approved value |
 | `Composite` | several properties under one AND/OR operator in a single evaluation |
+| `PostOperationSolvency` | touched accounts end solvent; an underwater one is not made worse |
+| `ConstantProduct` | the product of two reserves does not fall |
+| `SpecConformance` | the diff is exactly what the adopter's own spec produces |
+| `PanicState` | while paused, protected slots do not move |
+| `ValueRangeGuard` | configuration slots stay inside their permitted range |
+| `FeeConsistency` | fee accrual matches the declared rate on the base that moved |
+| `OracleLiveness` | the mirrored oracle timestamp is not stale |
+| `OracleDeviation` | spot does not diverge from TWAP beyond a bound |
+| `ParticipantAllowlist` | every participant is on the adopter's allowlist |
 
 ### SlotDomain is the one that makes the others trustworthy
 
@@ -188,7 +197,7 @@ value really accrues and that the attacks are really refused, so the invariants 
 
 ```bash
 forge build
-forge test           # 43 tests: 12 vault + 26 ported properties + 4 invariants + 1 anti-vacuity check
+forge test           # 69 tests: 12 vault + 26 ported + 26 reachable properties + 4 invariants + 1 anti-vacuity check
 ```
 
 Invariants run 256 × 64 by default (`foundry.toml`).
