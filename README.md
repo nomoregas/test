@@ -41,6 +41,34 @@ The cost is asynchronous writes. That is a real integration ask, and for some co
 too invasive — the fallback there is optimistic apply plus halt-on-violation, which is detection
 rather than prevention.
 
+## Two adoption paths
+
+**Async (`GuardedState`)** — the strong guarantee, for a contract you are writing now. No violating
+state change, ever, because every write routes through attested settlement. Costs a rewrite.
+
+**Additive (`Guardable`)** — for a contract that already exists. Annotate the functions that let value
+out with `guardedOutflow(amount)`; change no existing line. See
+[`src/subscribe/examples/LegacyVault.sol`](src/subscribe/examples/LegacyVault.sol), whose entire
+integration is `is Guardable`, an attestor in the constructor, and one modifier on `withdraw`.
+
+The additive path cannot prevent state corruption — nothing can veto a synchronous write, and any
+design claiming otherwise is lying. It prevents *extraction*, by inverting who acts. Operators do not
+veto; they periodically attest a spending budget with an expiry, having checked the property set
+off-chain. On-chain an outflow costs one storage read and a comparison. If a property breaks,
+operators stop refreshing and the budget lapses. **The absence of an attestation is the signal**, so
+nothing needs proving on-chain.
+
+That is fail-closed, which is right for a security device and a real liveness cost: a quorum that goes
+silent freezes withdrawals even when nothing is wrong (`test_silentQuorumFreezesWithdrawalsEvenWhenHealthy`).
+Exposure is bounded by the live budget, so budget size and expiry are the risk dial an integrator sets.
+
+One honest limitation, tested rather than footnoted: the phantom-holder hole is **worse and
+unclosable** here. `SlotDomain` shuts it in the async model by bounding the diff's domain; there is no
+diff in the additive model, so value credited to an address the conservation sweep never visits stays
+invisible and operators keep refreshing
+(`test_phantomHolderEscapesDetectionEntirely`). A legacy adopter's properties must enumerate reachable
+state, not a registration list.
+
 ## What the guarantee actually is
 
 In the default `OffchainVeto` mode nothing on-chain re-executes anything. If ≥66% of quorum stake
@@ -179,7 +207,8 @@ src/
 ├── interfaces/IProperty.sol   IProperty, IGuardedDomain, IAttestor, SlotWrite, TransitionContext
 ├── PropertyRegistry.sol       the enforced property set, add/remove at runtime
 ├── GuardedState.sol           intent queue + attested settlement + checkAll
-├── properties/                Conservation, Solvency, ConcentrationCap, SlotDomain
+├── subscribe/                 Guardable + LegacyVault: additive adoption for deployed contracts
+├── properties/                21 property contracts, one per file
 └── examples/GuardedVault.sol  worked integration; previewDeposit/previewTransfer are the spec
 test/
 ├── GuardedVault.t.sol             12 unit tests
@@ -197,7 +226,7 @@ value really accrues and that the attacks are really refused, so the invariants 
 
 ```bash
 forge build
-forge test           # 69 tests: 12 vault + 26 ported + 26 reachable properties + 4 invariants + 1 anti-vacuity check
+forge test           # 81 tests: 12 vault + 26 ported + 26 reachable + 12 additive-adoption + 4 invariants + 1 anti-vacuity
 ```
 
 Invariants run 256 × 64 by default (`foundry.toml`).
