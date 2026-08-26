@@ -107,6 +107,11 @@ a property sees the adopter's own storage diff and its view functions.
 
 That difference decides what ports cleanly, what ports in weakened form, and what cannot port at all.
 
+📋 **[`docs/PHYLAX-PARITY.md`](docs/PHYLAX-PARITY.md) is the full audit** — every one of their 26
+protection assertions, 22 Assertions Book entries, 7 micro-patterns, 43 PhEvm cheatcodes, 9 trigger
+types and 16 platform components, each marked Ported / Adapted / Weakened / Blocked / Open with the
+work needed. The table below is the short version.
+
 | Phylax assertion | Here | Fidelity |
 |---|---|---|
 | `SlotProtectionAssertion` / `forbidChangeForSlots` | `SlotProtection` | Full — including their conservative "a write counts even if the value is unchanged" |
