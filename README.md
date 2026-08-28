@@ -130,16 +130,30 @@ forge build
 forge test
 ```
 
+## What it costs
+
+Measured, not modelled — [`docs/GAS.md`](docs/GAS.md) has the method and caveats.
+
+| Holders | Unguarded | Guarded | Via Gas Killer | Saving |
+|---:|---:|---:|---:|---:|
+| 25 | 13,111 | 199,316 | 300,944 | −101,628 |
+| 50 | 13,111 | 371,708 | 300,944 | +70,764 |
+| 200 | 13,111 | 1,406,265 | 300,944 | +1,105,321 |
+| 800 | 13,111 | 5,548,009 | 300,944 | +5,247,065 |
+
+Rules cost ~6,900 gas per holder. Settlement is flat, because a guard writes nothing and so produces
+the same diff as an unguarded call.
+
+**Break-even is about 42 holders.** Below that, Gas Killer costs more than checking on-chain and
+should not be used. At 2,000 holders a guarded deposit is 13.8M gas — 46% of a block — and the check
+stops fitting in a block entirely at roughly 4,300 holders.
+
 ## Status
 
 Built: the 21 rules, the catalogue and subscription model, the `Guarded` modifier, a worked example,
-and 81 tests including a stateful suite that hammers a guarded vault with random calls.
+81 tests including a stateful suite, and the gas benchmark above.
 
 Not built:
-
-- **Gas benchmarks.** The claim is that these checks are affordable *because* of Gas Killer. That
-  number does not exist yet, and it is the number the whole pitch rests on. Measure a guarded vault
-  with and without Gas Killer settlement against an unguarded one.
 - **Nothing verifies a rule does what it says.** A subscriber trusts an address. Phylax publishes
   assertion code to a DA layer for this reason.
 - **No backtesting.** Replaying historical transactions would show how often a rule blocks something

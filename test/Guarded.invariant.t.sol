@@ -32,8 +32,7 @@ contract VaultHandler is Test {
         vm.prank(_actor(seed));
         try vault.deposit(amount) {
             succeeded++;
-        }
-            catch {
+        } catch {
             reverted++;
         }
     }
@@ -44,8 +43,7 @@ contract VaultHandler is Test {
         vm.prank(a);
         try vault.withdraw(amount) {
             succeeded++;
-        }
-            catch {
+        } catch {
             reverted++;
         }
     }
@@ -55,8 +53,7 @@ contract VaultHandler is Test {
         vm.prank(_actor(fromSeed));
         try vault.transfer(_actor(toSeed), amount) {
             succeeded++;
-        }
-            catch {
+        } catch {
             reverted++;
         }
     }
