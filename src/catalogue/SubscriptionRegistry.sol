@@ -18,6 +18,10 @@ import {IAdopterAdmin} from "./IAdopterAdmin.sol";
 ///
 ///      Authorisation goes through `IAdopterAdmin` rather than `msg.sender == adopter`, because a
 ///      contract already deployed cannot call `subscribe` and never will.
+///
+///      `checkAll` is what a guarded contract calls inside its own transaction. A rule that fails
+///      makes the call revert, so the security is the Solidity here and nothing else — no operators,
+///      no quorum, no off-chain party.
 contract SubscriptionRegistry {
     PropertyCatalogue public immutable catalogue;
     IAdopterAdmin public adminVerifier;
@@ -125,9 +129,9 @@ contract SubscriptionRegistry {
         return _subscriptions[adopter].length;
     }
 
-    /// @notice Evaluate every property `adopter` subscribes to.
-    /// @dev Same shape as `PropertyRegistry.checkAll`, so operators, monitors and `settle` share one
-    ///      code path whether an adopter is on a private registry or the shared catalogue.
+    /// @notice Evaluate every rule `adopter` subscribes to.
+    /// @dev Called by the adopter mid-transaction via `Guarded`, and by monitors out of band. Same
+    ///      answer either way.
     function checkAll(address adopter, TransitionContext calldata ctx)
         external
         view

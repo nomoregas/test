@@ -2,8 +2,6 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {GuardedState} from "../src/GuardedState.sol";
-import {PropertyRegistry} from "../src/PropertyRegistry.sol";
 import {IProperty, SlotWrite, TransitionContext} from "../src/interfaces/IProperty.sol";
 import {PreState} from "../src/PreState.sol";
 import {SlotProtection} from "../src/properties/SlotProtection.sol";
@@ -16,16 +14,13 @@ import {AssetFlowConsistency} from "../src/properties/AssetFlowConsistency.sol";
 import {ImplementationLock} from "../src/properties/ImplementationLock.sol";
 import {Composite} from "../src/properties/Composite.sol";
 import {SlotDomain} from "../src/properties/SlotDomain.sol";
-import {GuardedVault, ActionKind} from "../src/examples/GuardedVault.sol";
-import {MockAttestor} from "./mocks/MockAttestor.sol";
+import {MockAdopter} from "./mocks/MockAdopter.sol";
 
 /// @notice Tests for the properties ported from Phylax's assertion library.
 /// @dev Each property gets a holds-case and a violates-case, evaluated the way an operator would:
 ///      against the post-state and the proposed diff together.
 contract PortedPropertiesTest is Test, CatalogueFixture {
-    PropertyRegistry registry;
-    MockAttestor attestor;
-    GuardedVault vault;
+    MockAdopter vault;
 
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
@@ -35,13 +30,7 @@ contract PortedPropertiesTest is Test, CatalogueFixture {
 
     function setUp() public {
         _deployCatalogue();
-        registry = new PropertyRegistry(address(this));
-        attestor = new MockAttestor();
-        vault = new GuardedVault(registry, attestor, GuardedState.Mode.OffchainVeto, 10_000);
-        vm.prank(alice);
-        vault.register();
-        vm.prank(bob);
-        vault.register();
+        vault = new MockAdopter();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -199,16 +188,9 @@ contract PortedPropertiesTest is Test, CatalogueFixture {
 
     // -------------------------------------------------------- SharePriceFloor
 
-    /// @dev The vault starts empty, so drive it to a real share price first: 100 assets, 100 shares.
+    /// @dev Give the vault a real share price to reason about: 100 assets, 100 shares.
     function _seedVault() internal {
-        vm.prank(alice);
-        bytes32 id = vault.request(vault.encodeAction(ActionKind.Deposit, alice, address(0), 100));
-        bytes32[] memory ids = new bytes32[](1);
-        ids[0] = id;
-        SlotWrite[] memory w = vault.previewDeposit(alice, 100);
-        bytes32 digest = vault.transitionDigest(ids, w);
-        attestor.attest(digest);
-        vault.settle(ids, w, abi.encode(digest));
+        vault.setVault(100, 100);
     }
 
     function test_sharePriceFloor_allowsYieldAccrual() public {
@@ -247,34 +229,32 @@ contract PortedPropertiesTest is Test, CatalogueFixture {
 
     function test_assetFlow_agreesWithDeclaredDeposit() public {
         AssetFlowConsistency p = new AssetFlowConsistency();
+        vault.setVault(100, 100);
+        vault.setDeclaredFlow(100); // the vault says this transition brings in 100
 
-        vm.prank(alice);
-        bytes32 id = vault.request(vault.encodeAction(ActionKind.Deposit, alice, address(0), 100));
-        bytes32[] memory ids = new bytes32[](1);
-        ids[0] = id;
-
-        SlotWrite[] memory w = vault.previewDeposit(alice, 100);
-        TransitionContext memory ctx =
-            TransitionContext({target: address(vault), transitionIndex: 0, intentIds: ids, writes: w});
-        (bool ok,) = p.check(ctx);
+        (bool ok,) = _check(p, _one(vault.totalAssetsSlot(), 0, 100));
         assertTrue(ok);
     }
 
     function test_assetFlow_blocksDiffThatDisagreesWithIntent() public {
         AssetFlowConsistency p = new AssetFlowConsistency();
+        vault.setVault(500, 500);
+        vault.setDeclaredFlow(100); // says 100...
 
-        // The intent says 100; the diff moves 500.
-        vm.prank(alice);
-        bytes32 id = vault.request(vault.encodeAction(ActionKind.Deposit, alice, address(0), 100));
-        bytes32[] memory ids = new bytes32[](1);
-        ids[0] = id;
-
-        SlotWrite[] memory w = vault.previewDeposit(alice, 500);
-        TransitionContext memory ctx =
-            TransitionContext({target: address(vault), transitionIndex: 0, intentIds: ids, writes: w});
-        (bool ok, string memory reason) = p.check(ctx);
+        (bool ok, string memory reason) = _check(p, _one(vault.totalAssetsSlot(), 0, 500)); // ...moves 500
         assertFalse(ok);
         assertEq(reason, "totalAssets delta disagrees with declared net flow");
+    }
+
+    function test_assetFlow_blocksSharesCreditedToZeroAddress() public {
+        AssetFlowConsistency p = new AssetFlowConsistency();
+        vault.setVault(100, 100);
+        vault.setDeclaredFlow(0);
+        vault.setZeroShares(1);
+
+        (bool ok, string memory reason) = _check(p, new SlotWrite[](0));
+        assertFalse(ok);
+        assertEq(reason, "zero address holds shares");
     }
 
     // ---------------------------------------------------- ImplementationLock
@@ -348,33 +328,5 @@ contract PortedPropertiesTest is Test, CatalogueFixture {
     function test_composite_rejectsEmptyMemberSet() public {
         vm.expectRevert(Composite.NoMembers.selector);
         new Composite("Empty", Composite.Operator.Or, new IProperty[](0));
-    }
-
-    // ------------------------------------------------- compare-and-swap on apply
-
-    /// @notice A diff whose before-image does not match live storage is refused.
-    /// @dev Without this, every pre/post property is fiction: an operator could claim any history
-    ///      it liked and monotonicity, delta bounds and the share-price floor would all pass.
-    function test_settlementRejectsFabricatedBeforeImage() public {
-        _seedVault();
-        registry.add(new SlotDomain());
-
-        vm.prank(alice);
-        bytes32 id = vault.request(vault.encodeAction(ActionKind.Deposit, alice, address(0), 1));
-        bytes32[] memory ids = new bytes32[](1);
-        ids[0] = id;
-
-        // Claim alice's shares were 0 when they are really 100, to disguise a decrease as a rise.
-        SlotWrite[] memory lying = new SlotWrite[](1);
-        lying[0] = SlotWrite(vault.sharesSlot(alice), bytes32(0), bytes32(uint256(1)));
-        bytes32 digest = vault.transitionDigest(ids, lying);
-        attestor.attest(digest);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                GuardedState.StaleWrite.selector, vault.sharesSlot(alice), bytes32(0), bytes32(uint256(100))
-            )
-        );
-        vault.settle(ids, lying, abi.encode(digest));
     }
 }

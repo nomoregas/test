@@ -9,11 +9,11 @@ import {IProperty, TransitionContext} from "../interfaces/IProperty.sol";
 /// @dev Port of the structural argument behind Phylax's `AnomalyCompositeAssertion`, which applies
 ///      to this registry unchanged.
 ///
-///      A set of separately registered properties can only ever express OR. `PropertyRegistry`
-///      returns on the first violation, so registering three properties yields "block if h1 or h2 or
-///      h3 is violated". Blocking is disjunctive across registrations, so a conjunction — *block
-///      only when several heuristics agree* — cannot be assembled from separate entries at all. It
-///      has to live inside one `check`.
+///      A set of separately subscribed rules can only ever express OR. The registry returns on the
+///      first violation, so subscribing to three rules yields "revert if h1 or h2 or h3 is violated".
+///      Reverting is disjunctive across subscriptions, so a conjunction — *revert only when several
+///      heuristics agree* — cannot be assembled from separate entries at all. It has to live inside
+///      one `check`.
 ///
 ///      That matters whenever a single signal is too noisy to act on alone. A large withdrawal is
 ///      not an exploit; a large withdrawal *and* a fresh counterparty *and* an oracle that just

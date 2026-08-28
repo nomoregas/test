@@ -16,6 +16,21 @@ source and the whitepaper abstract rather than from documentation.
 | **Blocked** | Cannot be expressed in a diff-based model at all |
 | **Open** | Expressible here, simply not built yet |
 
+## How enforcement differs
+
+Phylax enforces at transaction inclusion: bonded actors (block builders, sequencers, searchers) commit
+that the transactions they include do not invalidate any assertion, and are slashed if they do. That
+needs the chain's cooperation, which is why they ship a reth fork, a Besu plugin and an OP-Stack
+integration.
+
+Here the rule runs **inside the transaction** and reverts. No bonded actors, no slashing, no
+cooperation from anyone — it works on any EVM because it is ordinary Solidity. Gas Killer is not part
+of that; it only makes the check affordable by running the call's compute off-chain.
+
+The trade is real in both directions. Their model needs no change to the protocol's code but only
+works on chains that adopted them. This one needs a modifier on each guarded function but works
+everywhere, today.
+
 ## Why fidelity varies at all
 
 Phylax assertions are **execution-trace based**. An assertion runs inside a custom EVM (`PhEvm`) with
@@ -158,10 +173,10 @@ Everything around the assertion library. We have essentially none of it, which i
 
 | Phylax component | Here | Status | Notes |
 |---|---|---|---|
-| Enforcement at transaction inclusion (bonded enforcers: builders, sequencers, searchers) | Contract-level attested settlement | **Adapted** | Fundamentally different. Theirs needs no change to protocol logic; ours makes all writes async. Ours needs no builder cooperation and works on any Cancun EVM |
-| State Oracle: Proof of Possibility / Proof of Realization | — | **Blocked** by Gas Killer's model | No fraud proof exists in the SDK, so there is nothing to prove a violation against |
-| Bonding and slashing of enforcers | — | **Open** at the AVS layer | Gas Killer has no slashing either (its own `SECURITY.md` says so). This is where their guarantee is objectively stronger |
-| `assertion-executor` | Operator node (`gas-killer/service`) | **Open** | Property evaluation is not wired into the real node at all |
+| Enforcement at transaction inclusion (bonded enforcers: builders, sequencers, searchers) | In-transaction revert | **Adapted** | Theirs needs no code change but requires an enabled chain. Ours needs a modifier per guarded function but runs on any EVM with no external party |
+| State Oracle: Proof of Possibility / Proof of Realization | — | **N/A** | Their mechanism exists to punish an enforcer who included a bad transaction. Nothing here can include one, so there is nothing to prove after the fact |
+| Bonding and slashing of enforcers | — | **N/A** | No enforcers to bond |
+| `assertion-executor` | — | **N/A** | Rules execute in the EVM as part of the call |
 | `assertion-da` (assertion data availability) | — | **Open** | Property code must be published and pinned somewhere verifiable |
 | `credible-layer-contracts` (StateOracle, Batch, admin/DA verifier registries) | `PropertyCatalogue` + `SubscriptionRegistry` + `IAdopterAdmin` | **Adapted** | Admin verifiers ported (self/ownable/allowlist), listings versioned. DA verifiers still absent — property code has nowhere verifiable to live |
 | `pcl` CLI (`pcl test`, `pcl apply`) | `forge test` | **Open** | No deploy/apply workflow, no config format |
@@ -212,5 +227,6 @@ guard rather than something the guard catches.
 6. **Backtesting against historical transactions.** Their `CredibleTestWithBacktesting` measures a
    property's false-block rate before it ships. Without this, `ConcentrationCap`-style deadlocks (see
    the README) are found in production rather than in review.
-7. **Wire property evaluation into the real operator node.** Until `gas-killer/service` evaluates
-   properties and vetoes on violation, none of this is enforced anywhere.
+7. **Gas benchmarks.** The rules are affordable because Gas Killer makes the call's compute cheap.
+   That number does not exist yet, and the whole argument rests on it: guarded vs. unguarded, with
+   and without Gas Killer settlement.

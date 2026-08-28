@@ -10,6 +10,8 @@ import {IOracleMirror} from "../../src/properties/OracleLiveness.sol";
 import {ITwapMirror} from "../../src/properties/OracleDeviation.sol";
 import {IFeeAccruing} from "../../src/properties/FeeConsistency.sol";
 import {IPreviewable} from "../../src/properties/SpecConformance.sol";
+import {IShareVault} from "../../src/properties/SharePriceFloor.sol";
+import {IFlowVault} from "../../src/properties/AssetFlowConsistency.sol";
 
 /// @notice A configurable stand-in adopter, so each property can be tested against the views it
 ///         needs without bending the example vault into every shape at once.
@@ -23,7 +25,9 @@ contract MockAdopter is
     IOracleMirror,
     ITwapMirror,
     IFeeAccruing,
-    IPreviewable
+    IPreviewable,
+    IShareVault,
+    IFlowVault
 {
     bytes32 public constant HEALTH_BASE = bytes32(uint256(0x100));
     bytes32 public constant RESERVE0 = bytes32(uint256(0x200));
@@ -34,6 +38,9 @@ contract MockAdopter is
     bytes32 public constant TWAP = bytes32(uint256(0x501));
     bytes32 public constant FEE_ACCRUED = bytes32(uint256(0x600));
     bytes32 public constant FEE_BASE = bytes32(uint256(0x601));
+    bytes32 public constant TOTAL_ASSETS = bytes32(uint256(0x700));
+    bytes32 public constant TOTAL_SUPPLY = bytes32(uint256(0x701));
+    bytes32 public constant ZERO_SHARES = bytes32(uint256(0x702));
 
     address[] internal _touched;
     mapping(address => uint256) internal _health;
@@ -55,6 +62,11 @@ contract MockAdopter is
     uint256 internal _feeRateBps;
 
     SlotWrite[] internal _preview;
+
+    uint256 internal _totalAssets;
+    uint256 internal _totalSupply;
+    uint256 internal _zeroShares;
+    int256 internal _declaredFlow;
 
     // ---------------------------------------------------------------- setters
 
@@ -100,6 +112,19 @@ contract MockAdopter is
         _feeAccrued = accrued;
         _feeBase = base;
         _feeRateBps = rateBps;
+    }
+
+    function setVault(uint256 assets, uint256 supply) external {
+        _totalAssets = assets;
+        _totalSupply = supply;
+    }
+
+    function setZeroShares(uint256 v) external {
+        _zeroShares = v;
+    }
+
+    function setDeclaredFlow(int256 v) external {
+        _declaredFlow = v;
     }
 
     function setPreview(SlotWrite[] memory w) external {
@@ -205,5 +230,33 @@ contract MockAdopter is
 
     function previewFor(bytes32[] calldata) external view returns (SlotWrite[] memory) {
         return _preview;
+    }
+
+    function totalAssets() external view override(IShareVault, IFlowVault) returns (uint256) {
+        return _totalAssets;
+    }
+
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply;
+    }
+
+    function totalAssetsSlot() external pure override(IShareVault, IFlowVault) returns (bytes32) {
+        return TOTAL_ASSETS;
+    }
+
+    function totalSupplySlot() external pure returns (bytes32) {
+        return TOTAL_SUPPLY;
+    }
+
+    function zeroAddressShares() external view returns (uint256) {
+        return _zeroShares;
+    }
+
+    function zeroAddressSharesSlot() external pure returns (bytes32) {
+        return ZERO_SHARES;
+    }
+
+    function declaredNetFlow(bytes32[] calldata) external view returns (int256) {
+        return _declaredFlow;
     }
 }
