@@ -120,7 +120,7 @@ src/
 ├── catalogue/                 PropertyCatalogue, SubscriptionRegistry, admin verifiers
 ├── properties/                21 rules, one per file
 └── examples/Vault.sol         ordinary synchronous vault, guarded
-test/                          81 tests
+test/                          107 tests
 ```
 
 ## Running
@@ -132,26 +132,32 @@ forge test
 
 ## What it costs
 
-Measured, not modelled — [`docs/GAS.md`](docs/GAS.md) has the method and caveats.
+Measured, not modelled — [`docs/GAS.md`](docs/GAS.md) has the method and the caveats.
 
-| Holders | Unguarded | Guarded | Via Gas Killer | Saving |
+A `borrow()` on a multi-asset lending protocol under a six-rule risk policy (per-market solvency,
+caps, oracle freshness, index floors, risk parameters, global accounting):
+
+| Markets | Unguarded | Guarded | Via Gas Killer | Saving |
 |---:|---:|---:|---:|---:|
-| 25 | 13,111 | 199,316 | 300,944 | −101,628 |
-| 50 | 13,111 | 371,708 | 300,944 | +70,764 |
-| 200 | 13,111 | 1,406,265 | 300,944 | +1,105,321 |
-| 800 | 13,111 | 5,548,009 | 300,944 | +5,247,065 |
+| 5 | 15,632 | 186,951 | 300,944 | −113,993 |
+| 10 | 15,632 | 298,110 | 300,944 | −2,834 |
+| 20 | 15,632 | 520,436 | 300,944 | **+219,492** |
+| 30 | 15,632 | 742,779 | 300,944 | **+441,835** |
+| 40 | 15,632 | 965,132 | 300,944 | **+664,188** |
 
-Rules cost ~6,900 gas per holder. Settlement is flat, because a guard writes nothing and so produces
-the same diff as an unguarded call.
+**Break-even is around 10 markets.** Aave carries roughly thirty. At that size the policy costs 47×
+the transaction it protects, which is why nobody runs these checks today.
 
-**Break-even is about 42 holders.** Below that, Gas Killer costs more than checking on-chain and
-should not be used. At 2,000 holders a guarded deposit is 13.8M gas — 46% of a block — and the check
-stops fitting in a block entirely at roughly 4,300 holders.
+**It is the combination that pays for itself.** At 30 markets, one rule costs 186k — cheaper on-chain.
+Two rules cost 324k and Gas Killer wins. No single rule justifies settlement; a policy does.
 
-## Status
+Settlement is flat because a guard writes nothing, so a guarded call produces the same diff as an
+unguarded one.
+
+## Status## Status
 
 Built: the 21 rules, the catalogue and subscription model, the `Guarded` modifier, a worked example,
-81 tests including a stateful suite, and the gas benchmark above.
+107 tests including a stateful suite, and the gas benchmark above.
 
 Not built:
 - **Nothing verifies a rule does what it says.** A subscriber trusts an address. Phylax publishes
