@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {IProperty, SlotWrite, TransitionContext} from "../src/interfaces/IProperty.sol";
+import {IProperty, SlotWrite, TransitionContext, CallEntry, LogEntry} from "../src/interfaces/IProperty.sol";
 import {PostOperationSolvency} from "../src/properties/PostOperationSolvency.sol";
 import {ConstantProduct} from "../src/properties/ConstantProduct.sol";
 import {ParticipantAllowlist} from "../src/properties/ParticipantAllowlist.sol";
@@ -34,10 +34,14 @@ contract OpenPropertiesTest is Test, CatalogueFixture {
     }
 
     function _ctx(SlotWrite[] memory writes) internal view returns (TransitionContext memory) {
-        return
-            TransitionContext({
-                target: address(adopter), transitionIndex: 0, intentIds: new bytes32[](0), writes: writes
-            });
+        return TransitionContext({
+            target: address(adopter),
+            transitionIndex: 0,
+            intentIds: new bytes32[](0),
+            writes: writes,
+            calls: new CallEntry[](0),
+            logs: new LogEntry[](0)
+        });
     }
 
     function _one(bytes32 slot, uint256 from, uint256 to) internal pure returns (SlotWrite[] memory w) {

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
+import {Guarded} from "../src/Guarded.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {IProperty} from "../src/interfaces/IProperty.sol";
 import {Vault} from "../src/examples/Vault.sol";
@@ -78,7 +79,7 @@ contract GuardedInvariantTest is StdInvariant, Test, CatalogueFixture {
 
     function setUp() public {
         _deployCatalogue();
-        vault = new Vault(subs, 10_000);
+        vault = new Vault(subs, 10_000, Guarded.GuardMode.Enforce);
         adminVerifier.setAdmin(address(vault), address(this), true);
 
         _protect(new Conservation(), "Conservation");

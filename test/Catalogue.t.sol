@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
-import {IProperty, SlotWrite, TransitionContext} from "../src/interfaces/IProperty.sol";
+import {IProperty, SlotWrite, TransitionContext, CallEntry, LogEntry} from "../src/interfaces/IProperty.sol";
 import {PropertyCatalogue} from "../src/catalogue/PropertyCatalogue.sol";
 import {SubscriptionRegistry} from "../src/catalogue/SubscriptionRegistry.sol";
 import {AdminVerifierSelf, AdminVerifierOwnable, AdminVerifierAllowlist} from "../src/catalogue/IAdopterAdmin.sol";
@@ -61,7 +61,14 @@ contract CatalogueTest is Test {
     function _ctx(address target, bytes32 slot) internal pure returns (TransitionContext memory) {
         SlotWrite[] memory w = new SlotWrite[](1);
         w[0] = SlotWrite(slot, bytes32(uint256(9)), bytes32(uint256(5)));
-        return TransitionContext({target: target, transitionIndex: 0, intentIds: new bytes32[](0), writes: w});
+        return TransitionContext({
+            target: target,
+            transitionIndex: 0,
+            intentIds: new bytes32[](0),
+            writes: w,
+            calls: new CallEntry[](0),
+            logs: new LogEntry[](0)
+        });
     }
 
     // ------------------------------------------------------------- the payoff

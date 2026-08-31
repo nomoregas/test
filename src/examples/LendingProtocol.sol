@@ -43,7 +43,7 @@ contract LendingProtocol is Guarded {
     uint256 public reserveFactorBps;
     bool public paused;
 
-    constructor(SubscriptionRegistry registry_) Guarded(registry_) {
+    constructor(SubscriptionRegistry registry_, GuardMode mode_) Guarded(registry_, mode_) {
         admin = msg.sender;
     }
 

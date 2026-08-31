@@ -18,17 +18,44 @@ struct SlotWrite {
     bytes32 newValue;
 }
 
+/// @notice One external call a transition makes.
+/// @dev Gas Killer's settlement format (`StateUpdateType[]` in `StateChangeHandlerLib`) applies
+///      `sstore`, `call` **and** `log`, so a settlement's calls are part of the diff and a rule can
+///      judge them. This is not a transaction trace: it is what the settlement itself does. For a
+///      guarded contract that is the only thing changing state, so it is the equivalent object.
+struct CallEntry {
+    address target;
+    uint256 value;
+    bytes data;
+}
+
+/// @notice One event a transition emits.
+/// @dev Unblocks the whole class of rule that reasons about emitted events — that a transfer was
+///      announced, that an expected event is present, that no unexpected one is. Phylax reads these
+///      from the transaction journal (`ph.getLogs`); here they come from the diff.
+struct LogEntry {
+    bytes32[] topics;
+    bytes data;
+}
+
 /// @notice Everything a property needs in order to judge a proposed transition.
-/// @dev Properties come in two flavours and this struct serves both:
+///
+/// @dev Properties come in three flavours and this struct serves all of them:
 ///      - *state* properties read the target's storage through its own view functions;
-///      - *diff* properties inspect `writes`, and can recover pre-state via `PreState`.
-///      The caller is responsible for evaluating a property against the **post-state**:
-///      operators do it on their off-chain simulation, tests do it after applying.
+///      - *diff* properties inspect `writes`, and can recover pre-state via `PreState`;
+///      - *effect* properties inspect `calls` and `logs` — what the transition did outwardly.
+///
+///      The caller is responsible for evaluating a property against the **post-state**. `calls` and
+///      `logs` are empty when a guarded function runs the rules directly, since a plain call has no
+///      declared effect list; they are populated when judging a Gas Killer settlement, whose diff
+///      carries them.
 struct TransitionContext {
     address target;
     uint256 transitionIndex;
     bytes32[] intentIds;
     SlotWrite[] writes;
+    CallEntry[] calls;
+    LogEntry[] logs;
 }
 
 /// @notice A single named property of a contract, evaluated on every state transition.

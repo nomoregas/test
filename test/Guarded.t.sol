@@ -22,7 +22,7 @@ contract GuardedTest is Test, CatalogueFixture {
 
     function setUp() public {
         _deployCatalogue();
-        vault = new Vault(subs, 10_000);
+        vault = new Vault(subs, 10_000, Guarded.GuardMode.Enforce);
 
         adminVerifier.setAdmin(address(vault), address(this), true);
         _protect(address(vault), new Conservation(), "Conservation");
@@ -103,7 +103,7 @@ contract GuardedTest is Test, CatalogueFixture {
     }
 
     function test_concentrationCapRevertsABreach() public {
-        Vault capped = new Vault(subs, 6000);
+        Vault capped = new Vault(subs, 6000, Guarded.GuardMode.Enforce);
         adminVerifier.setAdmin(address(capped), address(this), true);
         _protect(address(capped), new ConcentrationCap(100), "ConcentrationCap");
 
@@ -125,7 +125,7 @@ contract GuardedTest is Test, CatalogueFixture {
 
     /// @notice A vault subscribed to nothing still functions. Guards are opt-in, not a toll gate.
     function test_unsubscribedVaultIsSimplyUnguarded() public {
-        Vault bare = new Vault(subs, 10_000);
+        Vault bare = new Vault(subs, 10_000, Guarded.GuardMode.Enforce);
         vm.prank(alice);
         bare.deposit(100);
         bare.unguardedBuggyMint(attacker, 1_000);

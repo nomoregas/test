@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Test} from "forge-std/Test.sol";
+import {Guarded} from "../../src/Guarded.sol";
 import {console} from "forge-std/console.sol";
 import {IProperty} from "../../src/interfaces/IProperty.sol";
 import {LendingProtocol} from "../../src/examples/LendingProtocol.sol";
@@ -44,7 +45,7 @@ abstract contract PortfolioBenchBase is Test, CatalogueFixture {
 
     function setUp() public {
         _deployCatalogue();
-        proto = new LendingProtocol(subs);
+        proto = new LendingProtocol(subs, Guarded.GuardMode.Enforce);
         adminVerifier.setAdmin(address(proto), address(this), true);
 
         rules.push(new MarketSolvency());

@@ -34,7 +34,9 @@ contract Vault is Guarded, IConservable, ISolvent, IConcentrated {
 
     uint256 public immutable maxConcentrationBps;
 
-    constructor(SubscriptionRegistry registry_, uint256 maxConcentrationBps_) Guarded(registry_) {
+    constructor(SubscriptionRegistry registry_, uint256 maxConcentrationBps_, GuardMode mode_)
+        Guarded(registry_, mode_)
+    {
         maxConcentrationBps = maxConcentrationBps_;
     }
 
@@ -70,6 +72,11 @@ contract Vault is Guarded, IConservable, ISolvent, IConcentrated {
     function unguardedBuggyMint(address to, uint256 amount) external {
         _track(to);
         shares[to] += amount;
+    }
+
+    /// @notice Switch between reverting and recording. Restricted in a real deployment.
+    function setGuardMode(GuardMode mode_) external {
+        _setGuardMode(mode_);
     }
 
     function _track(address who) private {

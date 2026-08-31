@@ -23,6 +23,19 @@ accelerates does, and is not a party to the security of anything here.
 So: the guard provides the security, Gas Killer removes the reason not to use it. Either half works
 without the other.
 
+## Two modes
+
+`Enforce` (the default) reverts on a violation, so the bad state never lands. `Detect` lets the call
+succeed and emits `GuardViolation` instead.
+
+Detect exists for two reasons. Rolling a new rule out over a live protocol in Enforce mode means
+discovering a false positive by breaking user transactions; Detect measures the false-positive rate
+against real traffic first. And an Enforce-mode violation leaves **no on-chain trace at all** — the
+call reverted — so anything that needs evidence a rule was broken (an incident timeline, a claims
+process, an insurer) has nothing to cite.
+
+Detect provides no protection. A contract in Detect mode is monitored, not guarded.
+
 ## Integration
 
 ```solidity
@@ -95,12 +108,24 @@ deprecation marks one unrecommended without breaking anyone on it.
 | `ParticipantAllowlist` | every participant is on the contract's allowlist |
 | `SpecConformance` | changes are exactly what the contract's own preview produces |
 | `Composite` | several rules under one AND/OR operator in a single evaluation |
+| `CallAllowlist` | a transition only calls approved addresses, within value limits |
+| `RequiredEvent` | a state change must announce itself with a given event |
+| `NoUnexpectedEvents` | every event emitted is one the contract declared |
 
-Rules split into two kinds. Most read the contract's own view functions and need no configuration.
-The **diff-based** ones (`SlotProtection`, `Monotonic`, `DeltaBound`, `ValueConservation`,
-`ValueRangeGuard`, `SlotDomain`) judge *what changed* rather than the resulting state, and need the
-changes handed to them — useful when guarding a Gas Killer settlement, which applies a storage diff.
-`PreState` reconstructs before-and-after from that diff.
+Rules split into three kinds:
+
+- **State** rules read the contract's own view functions and need no configuration.
+- **Diff** rules (`SlotProtection`, `Monotonic`, `DeltaBound`, `ValueConservation`, `ValueRangeGuard`,
+  `SlotDomain`) judge *what changed* rather than the resulting state. `PreState` reconstructs
+  before-and-after from the diff.
+- **Effect** rules (`CallAllowlist`, `RequiredEvent`, `NoUnexpectedEvents`) judge what the transition
+  did outwardly. Gas Killer's settlement applies `sstore`, `call` **and** `log`, so a settlement's
+  calls and events are part of the diff and a rule can judge them. `CallAllowlist` is the important
+  one: a settlement that can call anything can move anything, so bounding call targets does for
+  outward effects what `SlotDomain` does for storage.
+
+Diff and effect rules need the transition handed to them via `_guardedWith`; the bare `guarded`
+modifier passes empty lists, since a plain call has no declared effect list.
 
 Two findings worth knowing before writing your own:
 
@@ -118,9 +143,9 @@ src/
 ├── Guarded.sol                the modifier; runs the rules, reverts on violation
 ├── PreState.sol               before/after reconstruction for diff-based rules
 ├── catalogue/                 PropertyCatalogue, SubscriptionRegistry, admin verifiers
-├── properties/                21 rules, one per file
+├── properties/                24 rules, one per file
 └── examples/Vault.sol         ordinary synchronous vault, guarded
-test/                          107 tests
+test/                          125 tests
 ```
 
 ## Running
@@ -156,8 +181,8 @@ unguarded one.
 
 ## Status## Status
 
-Built: the 21 rules, the catalogue and subscription model, the `Guarded` modifier, a worked example,
-107 tests including a stateful suite, and the gas benchmark above.
+Built: the 24 rules, the catalogue and subscription model, the `Guarded` modifier, a worked example,
+125 tests including a stateful suite, and the gas benchmark above.
 
 Not built:
 - **Nothing verifies a rule does what it says.** A subscriber trusts an address. Phylax publishes
