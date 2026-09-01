@@ -164,23 +164,23 @@ caps, oracle freshness, index floors, risk parameters, global accounting):
 
 | Markets | Unguarded | Guarded | Via Gas Killer | Saving |
 |---:|---:|---:|---:|---:|
-| 5 | 15,635 | 192,097 | 93,208 | **+98,889** |
-| 10 | 15,635 | 303,226 | 93,208 | **+210,018** |
-| 20 | 15,635 | 525,492 | 93,208 | **+432,284** |
-| 30 | 15,635 | 747,775 | 93,208 | **+654,567** |
-| 40 | 15,635 | 970,068 | 93,208 | **+876,860** |
+| 5 | 15,635 | 192,097 | 56,369 | **+135,728** |
+| 10 | 15,635 | 303,226 | 56,369 | **+246,857** |
+| 20 | 15,635 | 525,492 | 56,369 | **+469,123** |
+| 30 | 15,635 | 747,775 | 56,369 | **+691,406** |
+| 40 | 15,635 | 970,068 | 56,369 | **+913,699** |
 
 Settlement is via `SchnorrGasKillerSDK` — one aggregate secp256k1 signature verified in constant
 gas. **There is no break-even: the policy wins at every size, from one market.** Aave carries
 roughly thirty, where the policy costs 48× the transaction it protects, which is why nobody runs
 these checks today.
 
-The 93,208 is 76,117 of measured non-signature transaction plus **17,091 of measured Schnorr
-verification** — the SDK's own `SchnorrStakeRegistryGas` benchmark, cold, at full participation.
-The composition is arithmetic; a Schnorr settlement has not been observed end to end. Each
-non-signer adds 10,194. The BLS path costs **300,944**, of which 224,827 is signature verification
-alone. Choosing the scheme changes the argument completely: under BLS a single rule does not justify
-settlement and two do, while under Schnorr one rule breaks even at 13 markets. [`docs/GAS.md`](docs/GAS.md) has the
+The 56,369 is a **measured** `verifyAndUpdate` — real registry, real aggregate signature, this
+transition's two-word diff, execution plus the 21,000 base and calldata a receipt pays. Each
+non-signer adds 10,375; total operator count costs nothing. The BLS path costs **300,944**, of
+which 224,827 is signature verification alone. Choosing the scheme changes the argument completely:
+under BLS a single rule does not justify settlement and two do, while under Schnorr one rule breaks
+even at 6 markets. [`docs/GAS.md`](docs/GAS.md) has the
 derivation and the one caveat that cuts the other way.
 
 Settlement is flat because a guard writes nothing, so a guarded call produces the same diff as an

@@ -12,22 +12,23 @@ A `borrow()` on a multi-asset lending protocol, guarded by a six-rule risk polic
 solvency, supply and borrow caps, oracle freshness, index floors, risk-parameter consistency, and a
 recomputation of the protocol's running totals from the per-market figures.
 
-Settlement is via `SchnorrGasKillerSDK` at **93,208** gas, assuming full quorum participation.
-The BLS column is the measured alternative; [why the two differ](#the-signature-scheme-is-the-whole-story)
-is the most important number on this page.
+Settlement is via `SchnorrGasKillerSDK` at a **measured 56,369** gas — a real `verifyAndUpdate`
+carrying this transition's two-word diff, at full quorum participation. The BLS column is the
+measured alternative; [why the two differ](#the-signature-scheme-is-the-whole-story) is the most
+important number on this page.
 
 | Markets | Unguarded | Guarded | Policy cost | Via Schnorr | Saving | (via BLS) |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 15,635 | 103,200 | 87,565 | 93,208 | **+9,992** | −197,744 |
-| 5 | 15,635 | 192,097 | 176,462 | 93,208 | **+98,889** | −108,847 |
-| 10 | 15,635 | 303,226 | 287,591 | 93,208 | **+210,018** | +2,282 |
-| 20 | 15,635 | 525,492 | 509,857 | 93,208 | **+432,284** | +224,548 |
-| 30 | 15,635 | 747,775 | 732,140 | 93,208 | **+654,567** | +446,831 |
-| 40 | 15,635 | 970,068 | 954,433 | 93,208 | **+876,860** | +669,124 |
+| 1 | 15,635 | 103,200 | 87,565 | 56,369 | **+46,831** | −197,744 |
+| 5 | 15,635 | 192,097 | 176,462 | 56,369 | **+135,728** | −108,847 |
+| 10 | 15,635 | 303,226 | 287,591 | 56,369 | **+246,857** | +2,282 |
+| 20 | 15,635 | 525,492 | 509,857 | 56,369 | **+469,123** | +224,548 |
+| 30 | 15,635 | 747,775 | 732,140 | 56,369 | **+691,406** | +446,831 |
+| 40 | 15,635 | 970,068 | 954,433 | 56,369 | **+913,699** | +669,124 |
 
-**Under Schnorr with full participation there is no break-even — the six-rule policy wins at every
-size, starting at one market.** One non-signer pushes it to two markets. Under BLS it arrives around
-ten. Aave carries roughly thirty.
+**Under Schnorr there is no break-even — the six-rule policy wins at every size, from one market,
+and keeps winning with three non-signers.** Under BLS it arrives around ten. Aave carries roughly
+thirty.
 
 The unguarded call is a flat 15,635 at every size, because it only touches one market — that it does
 not move is the sanity check that the sweep, not the setup, is what the guarded column measures. At
@@ -48,7 +49,7 @@ At a fixed 30 markets, adding one rule at a time:
 | 6 | 747,775 | wins | wins |
 
 Under BLS the story was that no single rule justifies settlement and two do. **Under Schnorr a
-single rule justifies it** — one `MarketSolvency` sweep breaks even at 13 markets, against 53
+single rule justifies it** — one `MarketSolvency` sweep breaks even at 6 markets, against 53
 under BLS. The combination still helps, but it is no longer the thing carrying the argument.
 
 Each rule carries its own fixed overhead — a cold
@@ -90,38 +91,65 @@ reproduced here against `gas-killer/solidity-sdk` at solc 0.8.29:
 | warm, marginal per non-signer | 4,197 |
 
 Cold is the context that matters: a standalone `verifyAndUpdate` touches the registry for the first
-time in its transaction, which is what a receipt reflects. So:
+time in its transaction.
 
-| Term | Gas | Basis |
-|---|---:|---|
-| signature verification | 17,091 | measured, cold, full participation |
-| everything else | 76,117 | measured, carried over whole |
-| **total** | **93,208** | composition |
+### The settlement itself, measured
 
-Carrying the 76,117 over whole is deliberately conservative: a 64-byte signature is far less calldata
-than a BLS certificate with its non-signer public keys, so that term should shrink too. What remains
-unmeasured is a Schnorr `verifyAndUpdate` end to end — 93,208 is arithmetic on two measured parts,
-not an observed receipt.
+An earlier version of this document composed a Schnorr total by taking the BLS receipt and swapping
+its signature term — 76,117 of "everything else" plus 17,091 of verification, for 93,208. **That was
+wrong by 65%.** The borrowed remainder carried the BLS transaction's own diff and its certificate
+calldata, neither of which belongs to a Schnorr settlement of this transition.
+
+So measure the whole call instead. `external-bench/SchnorrSettlementGas.t.sol` runs a real
+`verifyAndUpdate` against the real `SchnorrStakeRegistry` with a real aggregate signature, generated
+in-test because `verifyAndUpdate` binds `msgHash` to `sha256(transitionIndex, target,
+targetFunction, storageUpdates)` and a fixture cannot satisfy that. Totals are execution plus
+intrinsic (21,000 base and EIP-2028 calldata), which is what a receipt shows:
+
+| Diff words | Non-signers | Execution | Intrinsic | **Total** |
+|---:|---:|---:|---:|---:|
+| 1 | 0 | 27,607 | 24,744 | **52,351** |
+| 2 | 0 | 30,937 | 25,432 | **56,369** |
+| 2 | 1 | 41,312 | 25,812 | **67,124** |
+| 2 | 3 | 62,044 | 26,548 | **88,592** |
+| 8 | 0 | 50,946 | 29,728 | **80,674** |
+
+A guarded `borrow()` writes two storage words (`test/bench/DiffSize.t.sol`, which also asserts the
+guarded and unguarded diffs are identical — the claim settlement flatness rests on), so **56,369**
+is this protocol's figure.
+
+Two things fall out. Each diff word costs about 3,320. And **total operator count does not matter,
+only non-signers**: ten operators with three non-signers costs exactly three operators with zero
+plus 3 × 10,369. The registry loops over non-signers alone; the aggregate and total weight are
+cached.
+
+Gas is deterministic for a given EVM version, so these are the numbers a Sepolia receipt would show
+for the same diff. Sepolia would validate the *pipeline* — router, operators, aggregation — not the
+gas. Measured at solc 0.8.29, forge 1.5.1, cancun.
+
+One conservative bias: the harness cools the target, so the measurement pays a cold account access
+(~2,600) that a real transaction does not, since EIP-2929 pre-warms `tx.to`. The true figure is
+around 2,500 lower.
 
 ### Non-signers
 
 Subtracting a non-signer's key from the aggregate has no secp256k1 precompile, so it is Solidity EC
 arithmetic: a modexp-based inverse plus three cold `SLOAD`s of the operator's record. Measured at
-**10,194 cold** for the first non-signer, and linear warm across k = 1..8 at 4,197 each. Cold beyond
-k = 1 is extrapolated from those two results.
+**10,375 per non-signer** end to end, agreeing with the 10,194 the registry benchmark shows in
+isolation.
 
-Under BLS this hid beneath a 225k constant. Under Schnorr it is around 11% of settlement per
-non-signer, so it belongs in any quote:
+Under BLS this hid beneath a 225k constant. Under Schnorr it is about 18% of settlement each, so it
+belongs in any quote:
 
 | Non-signers | Settlement | Policy break-even | Single-rule break-even |
 |---:|---:|---:|---:|
-| 0 | 93,208 | 1 market | 13 markets |
-| 1 | 103,402 | 2 | 15 |
-| 3 | 123,790 | 2 | 19 |
+| 0 | 56,369 | 1 market | 6 markets |
+| 1 | 67,124 | 1 | 8 |
+| 3 | 88,592 | 1 | 12 |
 
 One thing to watch: EIP-7883 (Fusaka) removes the historical `GQUADDIVISOR=3` for ≤32-byte modexp
-operands, tripling that call from 1,360 to 4,080 and raising the warm marginal from ~4.2k to ~6.9k.
-Every figure here is pre-repricing; the SDK's own test comments flag the same thing.
+operands, tripling that call from 1,360 to 4,080 and raising the per-non-signer marginal by roughly
+2,700. Every figure here is pre-repricing; the SDK's own test comments flag the same thing.
 
 Note the BLS transaction is Gas Killer's own `GuardedVault` settlement, not one of ours. Anchoring
 our case still needs a live settlement of this protocol, under Schnorr.
@@ -161,18 +189,17 @@ then measure that the check is expensive.
 
 The lesson generalises. The individually valuable rules are O(1) — an upgrade lock reads two slots, an
 oracle bound reads two. A guarded call carrying one of those runs to roughly 27k, so it does not
-justify settlement at 93k, let alone at 300k. What a protocol cannot afford is a *policy*: a dozen
+justify settlement even at 56k, let alone at 300k. What a protocol cannot afford is a *policy*: a dozen
 cheap checks applied across every listed asset, on every interaction. Schnorr lowers the bar a
 policy has to clear; it does not make a single flat rule worth settling.
 
 ## Not yet measured
 
-- **A Schnorr `verifyAndUpdate` end to end.** Verification is measured and the remainder is
-  measured, but 93,208 is their sum rather than an observed receipt. Carrying the BLS calldata
-  term over whole should make it an overestimate; confirm that.
-- **Non-signers beyond k=1, cold.** Cold is measured at k=0 and k=1; the rest extrapolates from
-  warm linearity. Under BLS the non-signer cost was never isolated at all — 224,827 was one
-  specific quorum.
+- **A settlement on a live network.** Everything here is local. Gas is deterministic, so the
+  figures should hold, but nothing has exercised the router, the operators or real aggregation
+  end to end. That is a pipeline question, not a gas one.
+- **The BLS non-signer cost**, never isolated — 224,827 was one specific quorum. Only the Schnorr
+  side is characterised against non-signer count.
 - **Post-EIP-7883 repricing.** Fusaka triples ≤32-byte modexp, taking the warm non-signer marginal
   from ~4.2k to ~6.9k. Re-run once the toolchain ships it.
 - **A live settlement of this protocol**, to anchor our own case rather than borrowing Gas Killer's.
