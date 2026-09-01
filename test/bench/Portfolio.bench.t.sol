@@ -33,9 +33,20 @@ import {CatalogueFixture} from "../helpers/CatalogueFixture.sol";
 ///      oracle freshness, index floors, risk-parameter consistency, and recomputing the protocol's
 ///      running totals from the per-market figures. Aave carries around thirty markets.
 abstract contract PortfolioBenchBase is Test, CatalogueFixture {
-    /// @dev Measured on Sepolia by Gas Killer, not modelled: a real `verifyAndUpdate` cost 300,944
-    ///      gas, 224,827 of it BLS verification, which is constant in off-chain compute.
-    uint256 internal constant SETTLEMENT = 300_944;
+    /// @dev What settling this transition costs, and the target the policy is measured against.
+    ///      Constant in off-chain compute under either scheme, which is what lets a flat cost beat
+    ///      a growing one.
+    ///
+    ///      `SETTLEMENT_BLS` is measured on Sepolia by Gas Killer, not modelled: a real
+    ///      `verifyAndUpdate` cost 300,944 gas, 224,827 of it BLS verification.
+    ///
+    ///      `SETTLEMENT` is the Schnorr path and is **modelled**: the same measured transaction
+    ///      minus BLS verification (76,117), plus roughly 10,000 for one `ecrecover`, two cold
+    ///      `SchnorrStakeRegistry` reads and challenge hashing. Pessimistic, since a 64-byte
+    ///      signature is far less calldata than a BLS certificate. Replace it the moment a real
+    ///      Schnorr settlement can be measured — see `docs/GAS.md`.
+    uint256 internal constant SETTLEMENT = 86_000;
+    uint256 internal constant SETTLEMENT_BLS = 300_944;
 
     LendingProtocol internal proto;
     IProperty[] internal rules;

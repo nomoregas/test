@@ -164,17 +164,23 @@ caps, oracle freshness, index floors, risk parameters, global accounting):
 
 | Markets | Unguarded | Guarded | Via Gas Killer | Saving |
 |---:|---:|---:|---:|---:|
-| 5 | 15,632 | 186,951 | 300,944 | −113,993 |
-| 10 | 15,632 | 298,110 | 300,944 | −2,834 |
-| 20 | 15,632 | 520,436 | 300,944 | **+219,492** |
-| 30 | 15,632 | 742,779 | 300,944 | **+441,835** |
-| 40 | 15,632 | 965,132 | 300,944 | **+664,188** |
+| 5 | 15,635 | 192,097 | ~86,000 | **+106,097** |
+| 10 | 15,635 | 303,226 | ~86,000 | **+217,226** |
+| 20 | 15,635 | 525,492 | ~86,000 | **+439,492** |
+| 30 | 15,635 | 747,775 | ~86,000 | **+661,775** |
+| 40 | 15,635 | 970,068 | ~86,000 | **+884,068** |
 
-**Break-even is around 10 markets.** Aave carries roughly thirty. At that size the policy costs 47×
-the transaction it protects, which is why nobody runs these checks today.
+Settlement is via `SchnorrGasKillerSDK` — one aggregate secp256k1 signature verified in constant
+gas. **There is no break-even: the policy wins at every size, from one market.** Aave carries
+roughly thirty, where the policy costs 48× the transaction it protects, which is why nobody runs
+these checks today.
 
-**It is the combination that pays for itself.** At 30 markets, one rule costs 186k — cheaper on-chain.
-Two rules cost 324k and Gas Killer wins. No single rule justifies settlement; a policy does.
+The ~86,000 is **modelled, not measured** — 76,117 of measured non-signature transaction plus about
+10,000 for an `ecrecover`, two cold registry reads and challenge hashing. The measured figure is the
+BLS path at **300,944**, of which 224,827 is signature verification alone. Choosing the scheme
+changes the argument completely: under BLS a single rule does not justify settlement and two do,
+while under Schnorr one rule breaks even at about 12 markets. [`docs/GAS.md`](docs/GAS.md) has the
+derivation and the one caveat that cuts the other way.
 
 Settlement is flat because a guard writes nothing, so a guarded call produces the same diff as an
 unguarded one.
