@@ -40,12 +40,13 @@ abstract contract PortfolioBenchBase is Test, CatalogueFixture {
     ///      `SETTLEMENT_BLS` is measured on Sepolia by Gas Killer, not modelled: a real
     ///      `verifyAndUpdate` cost 300,944 gas, 224,827 of it BLS verification.
     ///
-    ///      `SETTLEMENT` is the Schnorr path and is **modelled**: the same measured transaction
-    ///      minus BLS verification (76,117), plus roughly 10,000 for one `ecrecover`, two cold
-    ///      `SchnorrStakeRegistry` reads and challenge hashing. Pessimistic, since a 64-byte
-    ///      signature is far less calldata than a BLS certificate. Replace it the moment a real
-    ///      Schnorr settlement can be measured — see `docs/GAS.md`.
-    uint256 internal constant SETTLEMENT = 86_000;
+    ///      `SETTLEMENT` is the Schnorr path: the same measured transaction minus BLS
+    ///      verification (76,117), plus **17,091** of measured Schnorr verification — cold, full
+    ///      participation, from the SDK's own `test/SchnorrStakeRegistryGas.t.sol`. Each
+    ///      non-signer adds 10,194. Conservative, since a 64-byte signature is far less calldata
+    ///      than a BLS certificate. Both parts are measured but their sum has not been observed
+    ///      as a receipt — see `docs/GAS.md`.
+    uint256 internal constant SETTLEMENT = 93_208;
     uint256 internal constant SETTLEMENT_BLS = 300_944;
 
     LendingProtocol internal proto;
