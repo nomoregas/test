@@ -1,6 +1,6 @@
-out/
-cache/
-broadcast/
-lib/forge-std/
-docs/book/
 .env
+broadcast/
+cache/
+docs/book/
+lib/forge-std/
+out/

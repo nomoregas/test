@@ -164,15 +164,15 @@ caps, oracle freshness, index floors, risk parameters, global accounting):
 
 | Markets | Unguarded | Guarded | Via Gas Killer | Saving |
 |---:|---:|---:|---:|---:|
-| 5 | 15,635 | 192,097 | 56,369 | **+135,728** |
-| 10 | 15,635 | 303,226 | 56,369 | **+246,857** |
-| 20 | 15,635 | 525,492 | 56,369 | **+469,123** |
-| 30 | 15,635 | 747,775 | 56,369 | **+691,406** |
-| 40 | 15,635 | 970,068 | 56,369 | **+913,699** |
+| 5 | 31,986 | 208,437 | 56,369 | **+152,068** |
+| 10 | 31,986 | 319,565 | 56,369 | **+263,196** |
+| 20 | 31,986 | 541,832 | 56,369 | **+485,463** |
+| 30 | 31,986 | 764,114 | 56,369 | **+707,745** |
+| 40 | 31,986 | 986,408 | 56,369 | **+930,039** |
 
 Settlement is via `SchnorrGasKillerSDK` — one aggregate secp256k1 signature verified in constant
 gas. **There is no break-even: the policy wins at every size, from one market.** Aave carries
-roughly thirty, where the policy costs 48× the transaction it protects, which is why nobody runs
+roughly thirty, where the policy costs 24× the transaction it protects, which is why nobody runs
 these checks today.
 
 The 56,369 is a **measured** `verifyAndUpdate` — real registry, real aggregate signature, this

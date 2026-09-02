@@ -17,27 +17,31 @@ carrying this transition's two-word diff, at full quorum participation. The BLS 
 measured alternative; [why the two differ](#the-signature-scheme-is-the-whole-story) is the most
 important number on this page.
 
+All figures are full-transaction, as a receipt reports them — see
+[harness versus receipt](#harness-versus-receipt). Rows marked * were confirmed on-chain.
+
 | Markets | Unguarded | Guarded | Policy cost | Via Schnorr | Saving | (via BLS) |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 15,635 | 103,200 | 87,565 | 56,369 | **+46,831** | −197,744 |
-| 5 | 15,635 | 192,097 | 176,462 | 56,369 | **+135,728** | −108,847 |
-| 10 | 15,635 | 303,226 | 287,591 | 56,369 | **+246,857** | +2,282 |
-| 20 | 15,635 | 525,492 | 509,857 | 56,369 | **+469,123** | +224,548 |
-| 30 | 15,635 | 747,775 | 732,140 | 56,369 | **+691,406** | +446,831 |
-| 40 | 15,635 | 970,068 | 954,433 | 56,369 | **+913,699** | +669,124 |
+| 1 | 31,986 | 119,540 | 87,554 | 56,369 | **+63,171** | −181,404 |
+| 5 | 31,986 | 208,437 | 176,451 | 56,369 | **+152,068** | −92,507 |
+| 10 * | 31,986 | 319,565 | 287,579 | 56,369 | **+263,196** | +18,621 |
+| 20 | 31,986 | 541,832 | 509,846 | 56,369 | **+485,463** | +240,888 |
+| 30 * | 31,986 | 764,114 | 732,128 | 56,369 | **+707,745** | +463,170 |
+| 40 | 31,986 | 986,408 | 954,422 | 56,369 | **+930,039** | +685,464 |
 
 **Under Schnorr there is no break-even — the six-rule policy wins at every size, from one market,
 and keeps winning with three non-signers.** Under BLS it arrives around ten. Aave carries roughly
 thirty.
 
-The unguarded call is a flat 15,635 at every size, because it only touches one market — that it does
-not move is the sanity check that the sweep, not the setup, is what the guarded column measures. At
-30 markets the policy is **48× the cost of the transaction it protects**. That is the number that
-explains why nobody runs these checks today.
+The unguarded call is a flat 31,986 at every size, because it only touches one market — that it does
+not move, on-chain as well as in the harness, is the sanity check that the sweep and not the setup is
+what the guarded column measures. At 30 markets the policy is **24× the cost of the transaction it
+protects**. That is the number that explains why nobody runs these checks today.
 
 ## How many rules it takes
 
-At a fixed 30 markets, adding one rule at a time:
+At a fixed 30 markets, adding one rule at a time. Harness figures here, since what matters is the
+increments rather than the absolute level — add 16,340 for a receipt:
 
 | Rules | Guarded | vs Schnorr | vs BLS |
 |---:|---:|---|---|
@@ -49,7 +53,7 @@ At a fixed 30 markets, adding one rule at a time:
 | 6 | 747,775 | wins | wins |
 
 Under BLS the story was that no single rule justifies settlement and two do. **Under Schnorr a
-single rule justifies it** — one `MarketSolvency` sweep breaks even at 6 markets, against 53
+single rule justifies it** — one `MarketSolvency` sweep breaks even at 3 markets, against 30
 under BLS. The combination still helps, but it is no longer the thing carrying the argument.
 
 Each rule carries its own fixed overhead — a cold
@@ -143,9 +147,9 @@ belongs in any quote:
 
 | Non-signers | Settlement | Policy break-even | Single-rule break-even |
 |---:|---:|---:|---:|
-| 0 | 56,369 | 1 market | 6 markets |
-| 1 | 67,124 | 1 | 8 |
-| 3 | 88,592 | 1 | 12 |
+| 0 | 56,369 | 1 market | 3 markets |
+| 1 | 67,124 | 1 | 5 |
+| 3 | 88,592 | 1 | 9 |
 
 One thing to watch: EIP-7883 (Fusaka) removes the historical `GQUADDIVISOR=3` for ≤32-byte modexp
 operands, tripling that call from 1,360 to 4,080 and raising the per-non-signer marginal by roughly
@@ -153,6 +157,29 @@ operands, tripling that call from 1,360 to 4,080 and raising the per-non-signer 
 
 Note the BLS transaction is Gas Killer's own `GuardedVault` settlement, not one of ours. Anchoring
 our case still needs a live settlement of this protocol, under Schnorr.
+
+## Harness versus receipt
+
+Two different things get called "the gas cost of a guarded call", and mixing them understated the
+saving in an earlier version of this document.
+
+A Foundry test measures with `gasleft()` around the call, so it sees **execution only**, plus the
+harness's own `CALL` into the protocol (about 5,070, mostly a cold account access). A transaction
+receipt instead reports **intrinsic + execution**, where intrinsic is 21,000 plus EIP-2028 calldata
+(about 410 for `borrow(uint256,uint256)`) and there is no harness `CALL` at all.
+
+Net, a receipt runs **16,340 above** the harness figure. Measured, not derived: `script/GuardBench.s.sol`
+deploys the whole policy and sends real transactions, and at both 10 and 30 markets the gap came out
+at 16,339.
+
+| Markets | Harness | Receipt | Gap |
+|---:|---:|---:|---:|
+| 10 | 303,226 | 319,565 | 16,339 |
+| 30 | 747,775 | 764,114 | 16,339 |
+
+The settlement figure of 56,369 is already a full-transaction number, so the headline table quotes
+guarded costs on the same basis. Run it yourself with `./script/run-bench.sh` — no arguments starts
+a local anvil; set `RPC_URL` and `PRIVATE_KEY` for a real chain.
 
 ## Methodology, and a mistake worth not repeating
 
