@@ -3,8 +3,11 @@
 Reproduce with:
 
 ```bash
-forge test --match-path 'test/bench/*.bench.t.sol' -vv
+forge test --match-path 'test/bench/*.bench.t.sol' -vv   # the harness figures
+./script/run-bench.sh                                     # the same thing on a real chain
 ```
+
+For a live network, [`docs/SEPOLIA.md`](SEPOLIA.md) has the runbook and the egress caveat.
 
 ## The result
 
