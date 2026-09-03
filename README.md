@@ -1,6 +1,9 @@
 # Guards — contract safety rules that run on every call
 
-> Prototype. Unaudited.
+> Prototype. Unaudited. Not deployed anywhere.
+
+**[Interactive console](https://claude.ai/code/artifact/0a5ce5fe-c523-40ec-98f4-858bf9b8a065)** —
+paste a contract, get suggested guards, see what the policy costs against Schnorr settlement.
 
 The most valuable checks a contract could run are the ones it cannot afford to. Do the balances still
 add up across every holder? Is the vault still solvent? Has one account grown past its cap? Each is a
@@ -186,14 +189,31 @@ derivation and the one caveat that cuts the other way.
 Settlement is flat because a guard writes nothing, so a guarded call produces the same diff as an
 unguarded one.
 
-## Status## Status
+## Status
 
-Built: the 24 rules, the catalogue and subscription model, the `Guarded` modifier, a worked example,
-125 tests including a stateful suite, and the gas benchmark above.
+**Built and measured.** 24 rules, the catalogue and subscription model, the `Guarded` modifier, a
+worked lending example, 126 tests, and the gas figures above.
 
-Not built:
-- **Nothing verifies a rule does what it says.** A subscriber trusts an address. Phylax publishes
-  assertion code to a DA layer for this reason.
+Every number in [`docs/GAS.md`](docs/GAS.md) is measured, not modelled, and reproducible:
+
+| Claim | How it was established |
+|---|---|
+| Guarded call, 1–40 markets | `forge test --match-path 'test/bench/*.bench.t.sol'`, one transaction per data point |
+| The same, on a real chain | `./script/run-bench.sh` — verified on anvil in two independent containers |
+| Schnorr settlement, 56,369 | real `verifyAndUpdate`, real registry, real aggregate signature ([`external-bench/`](external-bench/)) |
+| Per non-signer, 10,375 | measured end to end, agreeing with the SDK's own registry benchmark |
+| A guarded call writes 2 words | `test/bench/DiffSize.t.sol`, which also asserts guarded and unguarded diffs are identical |
+| BLS settlement, 300,944 | a real Sepolia receipt — Gas Killer's own, not this protocol's |
+
+**Not established.** These are open, and the repo says so rather than implying otherwise:
+
+- **No live-network run of this protocol.** Everything is local. Gas is deterministic per EVM
+  version so the figures should hold, but nothing has touched a public chain.
+  [`docs/SEPOLIA.md`](docs/SEPOLIA.md) is the runbook.
+- **The AVS pipeline is untested.** The settlement benchmark plays the operators itself, so it
+  exercises the contract, not the router, real operator signing, or operator-set churn.
+- **Nothing verifies a rule does what it says.** A subscriber trusts an address.
+  Phylax publishes assertion code to a DA layer for this reason.
 - **No backtesting.** Replaying historical transactions would show how often a rule blocks something
   legitimate. Two rules here already turned out to deadlock the contracts they guard; both were caught
   by hand.

@@ -7,18 +7,17 @@ aggregation verifies on-chain.
 
 ## Prerequisites
 
-A Claude Code web session cannot reach any RPC endpoint unless the environment's network policy
-allows it. All of these returned 403 at the egress proxy on CONNECT: Ankr, Blast, BlockPI, Omnia,
-Tenderly, thirdweb, ZAN, Alchemy, Infura, drpc, RockX, SubQuery, OnFinality, Grove, publicnode,
-rpc.sepolia.org. `example.com` and `google.com` fail the same way while GitHub, npm and PyPI pass,
-so it is an allowlist rather than per-host blocking.
+A funded key and an RPC endpoint. From a laptop that is all.
 
-To run from a web session, the environment needs one RPC host allowed — `eth-sepolia.g.alchemy.com`
-or `sepolia.infura.io`, plus `api-sepolia.etherscan.io` if you want verification. Network policy is
-set when an environment is created, so a policy change needs a **new session** to take effect; the
-running container keeps the policy it started with.
+`https://ethereum-sepolia-rpc.publicnode.com` works with no API key or signup — verified returning
+chain id `11155111`. Alchemy and Infura work too but need a key; drpc rejects Sepolia on its free
+plan and Blast's public endpoint is retired.
 
-Nothing here needs a Claude session, though. It all runs from a laptop.
+**If you are running this from a Claude Code web session**, its environment's network policy has to
+allow an RPC host. On a restrictive policy every provider returns 403 at the egress proxy on
+CONNECT, and so do `example.com` and `google.com` while GitHub, npm and PyPI pass — an allowlist,
+not per-host blocking. Policy is fixed when an environment is created, so a change needs a **new**
+session; a running container keeps what it started with.
 
 ## 1. The guarded call, on-chain
 
@@ -72,3 +71,16 @@ This is the part with genuinely unknown outcomes — operator-set churn, `blockS
   uses it.
 - `gaskiller.xyz` is blocked from web sessions, so the SDK README rather than the hosted docs is the
   reference for integration.
+
+## Toolchain notes
+
+Neither Foundry nor `forge-std` is in a fresh container, and two usual install paths may be closed:
+
+- `foundryup` pulls from `foundry.paradigm.xyz`, which a restrictive egress policy blocks.
+- The GitHub *releases API* can be scoped to a single repository, returning 403 for
+  `foundry-rs/foundry`. Asset **downloads** from `github.com/.../releases/download/...` still work.
+
+What worked: download `foundry_stable_linux_amd64.tar.gz` from the `stable` tag directly, and
+`curl -C -` in a retry loop — the 80 MB transfer was cut off twice mid-stream and the server honours
+range requests. Then `git clone --depth 1 https://github.com/foundry-rs/forge-std lib/forge-std`,
+since it is gitignored rather than vendored and nothing compiles without it.
